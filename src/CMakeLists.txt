@@ -12,13 +12,16 @@ find_package(date CONFIG REQUIRED)
 set(ZING_SOURCE
     ${ZING_ROOT}/src/setting.cpp
 
+    ${ZING_ROOT}/src/imgui/imgui_utils.cpp
+    ${ZING_ROOT}/include/zing/imgui/imgui_utils.h
+
     ${ZING_ROOT}/src/time/timer.cpp
     ${ZING_ROOT}/include/zing/time/timer.h
 
     ${ZING_ROOT}/project.natvis
 
-    ${ZING_ROOT}/utils/wavetable.cpp
-    ${ZING_ROOT}/utils/wavetable.h
+    ${ZING_ROOT}/src/wavetable/wavetable.cpp
+    ${ZING_ROOT}/src/wavetable/wavetable.h
 
     ${ZING_ROOT}/include/zing/imgui_glm.h
     ${ZING_ROOT}/include/zing/math_utils.h
@@ -27,6 +30,12 @@ set(ZING_SOURCE
     ${ZING_ROOT}/include/zing/string/string_utils.h
     ${ZING_ROOT}/include/zing/string/murmur_hash.h
 
+    # Audio
+    ${ZING_ROOT}/src/audio/audio.cpp
+    ${ZING_ROOT}/src/audio/audio_analysis.cpp
+    ${ZING_ROOT}/include/zing/audio/audio.h
+    ${ZING_ROOT}/include/zing/audio/audio_analysis_settings.h
+    ${ZING_ROOT}/include/zing/audio/audio_device_settings.h
 )
 
 SET(SOUNDPIPE_DIR ${ZING_ROOT}/libs/soundpipe)
@@ -69,10 +78,17 @@ list(APPEND TEST_SOURCES
 add_library(Zing STATIC ${ZING_SOURCE})
 add_library(Zing::Zing ALIAS Zing)
 
+target_compile_definitions(Zing
+    PUBLIC
+    NO_LIBSNDFILE
+    _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING)
+
 target_link_libraries(Zing
 PRIVATE
     tomlplusplus::tomlplusplus
 PUBLIC
+    unofficial::concurrentqueue::concurrentqueue
+    unofficial::kissfft::kissfft
     fmt::fmt-header-only
     glm::glm
     Vulkan::Vulkan
@@ -85,15 +101,16 @@ target_include_directories(Zing
 PRIVATE
     ${CMAKE_BINARY_DIR}
 PUBLIC
-    ${SOUNDPIPE_DIR}/h
-    ${SOUNDPIPE_DIR}/lib/dr_wav
-    ${SOUNDPIPE_DIR}/lib/faust
-    ${SOUNDPIPE_DIR}/lib/inih
-    ${SOUNDPIPE_DIR}/lib/openlpc
-    ${SOUNDPIPE_DIR}/lib/kissfft
-    ${SOUNDPIPE_DIR}/lib/spa
-    ${SOUNDPIPE_DIR}/h
-    ${SOUNDPIPE_EXTENSIONS_DIR}
+    $<BUILD_INTERFACE:${ZING_ROOT}/libs>
+    $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/h>
+    $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/dr_wav>
+    $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/faust>
+    $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/inih>
+    $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/openlpc>
+    $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/kissfft>
+    $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/spa>
+    $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/h>
+    $<BUILD_INTERFACE:${SOUNDPIPE_EXTENSIONS_DIR}>
     $<BUILD_INTERFACE:${ZING_ROOT}/include>
     $<BUILD_INTERFACE:${ZING_ROOT}/tomlplusplus/include>
     $<INSTALL_INTERFACE:include>
@@ -121,5 +138,6 @@ install(DIRECTORY ${ZING_ROOT}/include/zing
 )
 
 source_group ("zing" FILES ${ZING_SOURCE})
-source_group ("vulkan" FILES ${ZING_VULKAN_SOURCE})
+source_group ("soundpipe" FILES ${SOUNDPIPE_SOURCE})
+source_group ("earlevel" FILES ${EARLEVEL_SOURCE})
 

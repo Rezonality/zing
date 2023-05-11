@@ -3,9 +3,9 @@
 #include <filesystem>
 #include <glm/glm.hpp>
 #include <unordered_map>
-#include <nodegraph/string/string_utils.h>
+#include <zing/string/string_utils.h>
 
-namespace NodeGraph {
+namespace Zing {
 
 enum class SettingType
 {
@@ -201,9 +201,9 @@ public:
 };
 
 #ifdef DECLARE_SETTINGS
-#define DECLARE_SETTING_VALUE(name) NodeGraph::StringId name(#name);
+#define DECLARE_SETTING_VALUE(name) Zing::StringId name(#name);
 #else
-#define DECLARE_SETTING_VALUE(name) extern NodeGraph::StringId name;
+#define DECLARE_SETTING_VALUE(name) extern Zing::StringId name;
 #endif
 
 class GlobalSettingManager : public SettingManager

@@ -1,8 +1,10 @@
-#include <nodegraph/theme.h>
-#include <nodegraph/file/toml_utils.h>
+#include <zing/file/toml_utils.h>
 #include <toml++/toml.h>
 
-namespace NodeGraph {
+#define DECLARE_SETTINGS
+#include <zing/setting.h>
+
+namespace Zing {
 bool SettingManager::Save(const std::filesystem::path& path)
 {
     toml::table tbl;

@@ -9,7 +9,7 @@
 #include <mutex>
 #include <vector>
 
-namespace NodeGraph
+namespace Zing
 {
 
 // Useful chrono stuff
@@ -160,4 +160,4 @@ enum class DateTimeFormat
 std::string timerange_to_string(TimeRange r, DateTimeFormat format);
 std::string datetime_to_string(DateTime d, DateTimeFormat format);
 
-} // namespace NodeGraph
+} // namespace Zing

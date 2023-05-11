@@ -7,9 +7,9 @@
 #include <unordered_map>
 #include <vector>
 #include <iomanip>
-#include <nodegraph/string/string_utils.h>
+#include <zing/string/string_utils.h>
 
-namespace NodeGraph
+namespace Zing
 {
 
 inline size_t string_count_utf8_bytes(unsigned int c)
@@ -168,9 +168,9 @@ inline bool string_equals(const std::string& str, const std::string& str2)
 namespace std
 {
 template <>
-struct hash<NodeGraph::StringId>
+struct hash<Zing::StringId>
 {
-    std::size_t operator()(const NodeGraph::StringId& k) const
+    std::size_t operator()(const Zing::StringId& k) const
     {
         // Compute individual hash values for first,
         // second and third and combine them using XOR
@@ -181,7 +181,7 @@ struct hash<NodeGraph::StringId>
 };
 } // namespace std
 
-namespace NodeGraph
+namespace Zing
 {
 inline bool string_equals(const StringId lhs, const StringId rhs)
 {

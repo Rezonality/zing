@@ -2,13 +2,13 @@
 #include <sstream>
 #include <string>
 
-#include <nodegraph/logger/logger.h>
-#include <nodegraph/time/timer.h>
+#include <zing/logger/logger.h>
+#include <zing/time/timer.h>
 
 using namespace std::chrono;
 using namespace date;
 
-namespace NodeGraph
+namespace Zing
 {
 
 timer globalTimer;
@@ -115,4 +115,4 @@ std::string datetime_to_string(DateTime d, DateTimeFormat format)
     }
 }
 
-} // namespace NodeGraph
+} // namespace Zing

@@ -8,13 +8,13 @@
 #include <sstream>
 #include <string>
 
-#include <nodegraph/string/string_utils.h>
+#include <zing/string/string_utils.h>
 
 using namespace std;
 
 // StringUtils.
 // Note, simple, effective string utilities which concentrate on useful functinality and correctness and not on speed!
-namespace NodeGraph
+namespace Zing
 {
 
 // https://stackoverflow.com/a/17708801/18942
@@ -517,4 +517,4 @@ std::vector<int> string_get_integers(const std::string& str)
     return vals;
 }
 
-} // namespace NodeGraph
+} // namespace Zing

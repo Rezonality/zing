@@ -42,9 +42,7 @@ static ImGui_ImplVulkanH_Window g_MainWindowData;
 static uint32_t g_MinImageCount = 2;
 static bool g_SwapChainRebuild = false;
 
-std::shared_ptr<zing::VulkanImGuiTexture> g_pFontTexture;
-
-namespace zing {
+namespace Zing {
 #undef ERROR
 #ifdef _DEBUG
 Logger logger = { true, LT::DBG };
@@ -372,7 +370,7 @@ int main(int, char**)
 
     auto& settings = GlobalSettingManager::Instance();
 
-    settings.Load(fs::path(zing_ROOT) / "settings.toml");
+    settings.Load(fs::path(ZING_ROOT) / "settings.toml");
 
     auto windowSize = settings.GetVec2f(s_windowSize);
     if (windowSize.x == 0 || windowSize.y == 0)
@@ -472,17 +470,18 @@ int main(int, char**)
 
     // Note: Adjust font size as appropriate!
 
-    auto fontPath = fs::path(zing_ROOT) / "run_tree" / "fonts" / "Cousine-Regular.ttf";
+    auto fontPath = fs::path(ZING_ROOT) / "run_tree" / "fonts" / "Cousine-Regular.ttf";
     io.Fonts->AddFontFromFileTTF(fontPath.string().c_str(), 26);
 
     ImFontConfig config;
     config.MergeMode = true;
     config.GlyphMinAdvanceX = 13.0f; // Use if you want to make the icon monospaced
-    static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
+    /* static const ImWchar icon_ranges[] = { ICON_MIN_FA, ICON_MAX_FA, 0 };
     auto fapath1 = fs::path(zing_ROOT) / "run_tree" / "fonts" / "fa-regular-400.ttf";
     auto fapath2 = fs::path(zing_ROOT) / "run_tree" / "fonts" / "fa-solid-900.ttf";
     io.Fonts->AddFontFromFileTTF(fapath1.string().c_str(), 13.0f, &config, icon_ranges);
     io.Fonts->AddFontFromFileTTF(fapath2.string().c_str(), 13.0f, &config, icon_ranges);
+    */
 
     // Upload Fonts
     {
@@ -514,15 +513,13 @@ int main(int, char**)
         ImGui_ImplVulkan_DestroyFontUploadObjects();
     }
 
-    g_pFontTexture = std::make_shared<zing::VulkanImGuiTexture>(g_PhysicalDevice, g_Device, g_Queue, g_DescriptorPool);
-
     // Our state
     bool show_demo_window = true;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // Main loop
     bool done = false;
-    bool demo_init = true;
+    bool demo_start = true;
     while (!done)
     {
         // Poll and handle events (inputs, window resize, etc.)
@@ -563,36 +560,16 @@ int main(int, char**)
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
-        ImGui::Begin("Font Maps");
-        auto textures = g_pFontTexture->GetTextures();
-        auto pDraw = ImGui::GetWindowDrawList();
-        auto min = pDraw->GetClipRectMin();
-        auto max = pDraw->GetClipRectMax();
-        auto step = (max.y - min.y) / float(textures.size());
-        auto current = min;
-        for (auto i = 0; i < textures.size(); i++)
-        {
-            auto name = fmt::format("FontMap: {}", i);
-            ImGui::GetWindowDrawList()->AddImage((ImTextureID)textures[i], current, ImVec2(max.x, current.y + step));
-            current.y += step;
-        }
+        ImGui::Begin("Debug");
+        ImGui::Text("%d", 1);
         ImGui::End();
 
-        auto pCanvas = demo_get_canvas();
-        if (pCanvas)
+        if (demo_start)
         {
-            auto& in = pCanvas->GetInputState();
-            ImGui::Begin("Debug");
-            ImGui::Text("%d capture", in.m_pMouseCapture);
-            ImGui::Text("%d tips", TipTimer::ActiveTips.size());
-            ImGui::End();
+            demo_init();
+            demo_start = false;
         }
-
-        ImGui::Begin("Canvas");
-        auto winSize = (glm::vec2)ImGui::GetContentRegionAvail();
-        demo_resize(winSize, g_pFontTexture.get());
         demo_draw();
-        ImGui::End();
 
         // Rendering
         ImGui::Render();
@@ -630,7 +607,7 @@ int main(int, char**)
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    GlobalSettingManager::Instance().Save(fs::path(zing_ROOT) / "settings.toml");
+    GlobalSettingManager::Instance().Save(fs::path(ZING_ROOT) / "settings.toml");
 
     return 0;
 }

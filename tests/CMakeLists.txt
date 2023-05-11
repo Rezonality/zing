@@ -15,8 +15,8 @@ list(APPEND TEST_SOURCES
     ${TEST_ROOT}/CMakeLists.txt
     ${TEST_ROOT}/main.cpp)
 
-file(GLOB_RECURSE FOUND_TEST_SOURCES "${NODEGRAPH_ROOT}/*.test.cpp")
-exclude_files_from_dir_in_list("${FOUND_TEST_SOURCES}" "/m3rdparty/" FALSE)
+file(GLOB_RECURSE FOUND_TEST_SOURCES "${ZING_ROOT}/*.test.cpp")
+exclude_files_from_dir_in_list("${FOUND_TEST_SOURCES}" "/libs/" FALSE)
 
 enable_testing()
 
@@ -35,7 +35,7 @@ target_include_directories(unittests PRIVATE
 
 target_link_libraries(unittests
     PRIVATE
-        NodeGraph::NodeGraph
+        Zing::Zing
         Catch2::Catch2
         Catch2::Catch2WithMain
         ${PLATFORM_LINKLIBS}

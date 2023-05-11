@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/string_cast.hpp>
 
-namespace NodeGraph {
+namespace Zing {
 
 template <class T>
 struct NRect
@@ -406,4 +406,4 @@ inline glm::vec4 ModifyAlpha(const glm::vec4& val, float alpha)
     return glm::vec4(val.x, val.y, val.z, alpha);
 }
 
-} // NodeGraph
+} // Zing

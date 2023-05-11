@@ -23,7 +23,7 @@ __declspec(dllimport) void __stdcall OutputDebugStringA(_In_opt_ const char* psz
 
 #undef ERROR
 
-namespace NodeGraph
+namespace Zing
 {
 
 enum class LT
@@ -113,10 +113,10 @@ private:
 
 #ifndef LOG
 #ifdef _DEBUG
-#define LOG(a, b) Log(NodeGraph::LT::a) << b
+#define LOG(a, b) Log(Zing::LT::a) << b
 #else
 #define LOG(a, b)
 #endif
 #endif
 
-} // namespace NodeGraph
+} // namespace Zing

@@ -1,9 +1,10 @@
 #include <filesystem>
 #include <fmt/format.h>
 #include <memory>
-
+#include <imgui.h>
+#include <zing/audio/audio.h>
 extern "C" {
-#include "libs/soundpipe/h/soundpipe.h"
+#include <soundpipe/h/soundpipe.h>
 }
 
 #include <config_app.h>
@@ -11,16 +12,19 @@ using namespace Zing;
 namespace fs = std::filesystem;
 
 namespace {
+}
+
+void demo_init()
+{
+    audio_init(nullptr);
+}
 
 void demo_draw()
 {
-    ImGui::Begin();
-
-    ImGui::Text("Hello");
-
-    ImGui::End();
+    audio_show_gui();    
 }
 
 void demo_cleanup()
 {
+    audio_destroy();
 }

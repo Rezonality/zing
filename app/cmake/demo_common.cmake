@@ -16,9 +16,9 @@ elseif (WIN32)
 endif()
 
 set(RESOURCE_DEPLOY_FILES ${RESOURCE_DEPLOY_FILES}
-    ${NODEGRAPH_ROOT}/run_tree/fonts/Cousine-Regular.ttf
-    ${NODEGRAPH_ROOT}/run_tree/fonts/DroidSans.ttf
-    ${NODEGRAPH_ROOT}/run_tree/fonts/Roboto-Medium.ttf)
+    ${ZING_ROOT}/run_tree/fonts/Cousine-Regular.ttf
+    ${ZING_ROOT}/run_tree/fonts/DroidSans.ttf
+    ${ZING_ROOT}/run_tree/fonts/Roboto-Medium.ttf)
 
 if (WIN32)
     configure_file("${APP_ROOT}/cmake/windows_metafile.rc.in"
@@ -46,8 +46,6 @@ if (APPLE)
 elseif (WIN32)
     set(${FILES_TO_INCLUDE} ${RES_FILES})
 endif()
-
-MESSAGE(STATUS ${${FILES_TO_INCLUDE}})
 
 endmacro()
 
