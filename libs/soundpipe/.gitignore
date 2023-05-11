@@ -1,0 +1,20 @@
+*.o
+*.a
+*.wav
+*.raw
+*.swp
+*.dSYM
+soundpipe.h
+soundpipe.c
+.DS_Store
+docs
+*.html
+examples/plot.dat
+examples/*.bin
+config.mk
+test/*.bin
+lib/fft/fft.c
+
+# Generated files
+util/wav2smp
+sp_dict.lua

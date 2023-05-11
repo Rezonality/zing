@@ -1,0 +1,5 @@
+@PACKAGE_INIT@
+
+if(NOT TARGET NodeGraph::NodeGraph)
+    include(${CMAKE_CURRENT_LIST_DIR}/nodegraph-targets.cmake)
+endif()

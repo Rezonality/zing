@@ -1,0 +1,7 @@
+ignore:
+  - "m3rdparty"
+  - "cmake"
+  - "scripts"
+  - "runtree"
+  - "screenshots"
+  - "build"
