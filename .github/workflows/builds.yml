@@ -1,0 +1,110 @@
+name: Builds
+
+on: [push]
+
+jobs:
+  build:
+    # The CMake configure and build commands are platform agnostic and should work equally
+    # well on Windows or Mac.  You can convert this to a matrix build if you need
+    # cross-platform coverage.
+    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+    name: "${{matrix.title}} (${{matrix.cc}}, ${{matrix.arch}}, ${{matrix.build_type}})"
+    runs-on: ${{matrix.os}}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { title: "Linux", os: "ubuntu-latest", cc: "clang", arch: "x64", build_type: "Release", package_type: "x64-linux", script: "sh" }
+          - { title: "Linux", os: "ubuntu-latest", cc: "clang", arch: "x64", build_type: "Debug", package_type: "x64-linux", script: "sh" }
+          - { title: "Linux", os: "ubuntu-latest", cc: "gcc", arch: "x64", build_type: "Release", package_type: "x64-linux", script: "sh" }
+          - { title: "Linux", os: "ubuntu-latest", cc: "gcc", arch: "x64", build_type: "Debug", package_type: "x64-linux", script: "sh" }
+          - { title: "Windows", os: "windows-latest", cc: "vs2019", arch: "x64", build_type: "Release", package_type: "x64-windows-static-md", script: "bat" }
+          - { title: "Windows", os: "windows-latest", cc: "vs2019", arch: "x64", build_type: "Debug", package_type: "x64-windows-static-md", script: "bat" }
+          - { title: "Mac", os: "macos-latest", cc: "clang", arch: "x64", build_type: "Release", package_type: "x64-osx", script: "sh" }
+          - { title: "Mac", os: "macos-latest", cc: "clang", arch: "x64", build_type: "Debug", package_type: "x64-osx", script: "sh" }
+          #- { title: "Coverage", os: "ubuntu-latest", cc: "clang", arch: "x64", build_type: "Coverage", package_type: "x64-linux", script: "sh" }
+
+    steps:
+
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install Vulkan SDK
+      uses: humbletim/setup-vulkan-sdk@v1.2.0
+      with:
+        vulkan-query-version: latest
+        vulkan-components: Vulkan-Headers, Vulkan-Loader
+        vulkan-use-cache: true
+
+    - name: Mac pkg-config
+      run: |
+        brew install pkg-config
+      if: matrix.os == 'macos-latest'
+
+    - name: Install Coverage
+      env:
+        CC: ${{ matrix.cc}}
+      run: |
+        sudo apt-get install lcov
+      if: matrix.os == 'ubuntu-latest'
+
+    - name: Build Zing
+      working-directory: ${{github.workspace}}
+      run: |
+        ./prebuild.${{matrix.script}}
+        mkdir build
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        cmake --build . --config ${{ matrix.build_type }}
+      if: matrix.build_type != 'Coverage'
+
+    - name: Build Zing (Coverage)
+      working-directory: ${{github.workspace}}
+      run: |
+        ./prebuild.${{matrix.script}}
+        mkdir build
+        cd build
+        cmake .. -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug
+        cmake --build . --config Debug
+      if: matrix.build_type == 'Coverage'
+
+    #- name: Test
+    #  working-directory: ${{github.workspace}}/build
+    #  shell: bash
+    #  run: ctest -C ${{ matrix.build_type }}
+
+    - name: Coverage
+      working-directory: ${{github.workspace}}/build
+      shell: bash
+      if: matrix.build_type == 'Coverage'
+      env:
+        CODACY_PROJECT_TOKEN: ${{ secrets.CODACY_PROJECT_TOKEN }}
+      run: |
+        bash <(curl -s https://codecov.io/bash)
+        find .. -name *.gcno | xargs gcov
+        lcov -c -d .. -o coverage.info
+        lcov --remove coverage.info '/usr/local/include/*' '/usr/include/*' 'build' 'libs' 'cmake' 'scripts' -o coverage.info
+        genhtml coverage.info
+        bash <(curl -Ls https://coverage.codacy.com/get.sh) report -r coverage.info
+
+    - name: Archive Coverage HTML
+      uses: actions/upload-artifact@v2
+      if: matrix.build_type == 'Coverage'
+      with:
+          name: coverage-html
+          path: |
+            ${{github.workspace}}/build/**/*.html
+            ${{github.workspace}}/build/**/*.css
+
+    - name: Archive Binary
+      uses: actions/upload-artifact@v2
+      with:
+          name: binaries
+          path: |
+            ${{github.workspace}}/build/app/**/*.ttf
+            ${{github.workspace}}/build/app/**/*.pdb
+            ${{github.workspace}}/build/app/**/*.scm
+            ${{github.workspace}}/build/app/**/Zing*
+            ${{github.workspace}}/build/tests/**/unittests
+
