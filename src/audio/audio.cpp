@@ -1,4 +1,6 @@
 #include <chrono>
+#include <cmath>
+#include <glm/gtc/constants.hpp>
 #include <imgui.h>
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
@@ -90,7 +92,22 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
             float beatAtTime = 0.0f;
             float quantum = 0.0f;
             std::chrono::microseconds hostTime(0);
-            memset(outputBuffer, 0, nBufferFrames * ctx.outputState.channelCount * sizeof(float));
+
+            /*
+            static double step = 0.0f;
+            float* pOut = (float*)(outputBuffer);
+            for (uint32_t i = 0; i < nBufferFrames; i++)
+            {
+                for (uint32_t ch = 0; ch < ctx.outputState.channelCount; ch++)
+                {
+                    pOut[ch] = float(sin(2.0 * glm::pi<double>() * 440.0 * step ));
+                }
+                pOut += ctx.outputState.channelCount;
+                step += deltaTime;
+            }
+            */
+
+            //memset(outputBuffer, 0, nBufferFrames * ctx.outputState.channelCount * sizeof(float));
             if (ctx.m_fnCallback)
             {
                 ctx.m_fnCallback(beatAtTime, quantum, hostTime, outputBuffer, inputBuffer, nBufferFrames);

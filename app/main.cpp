@@ -560,10 +560,6 @@ int main(int, char**)
         if (show_demo_window)
             ImGui::ShowDemoWindow(&show_demo_window);
 
-        ImGui::Begin("Debug");
-        ImGui::Text("%d", 1);
-        ImGui::End();
-
         if (demo_start)
         {
             demo_init();
