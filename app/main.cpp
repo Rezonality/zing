@@ -1,8 +1,7 @@
 #pragma warning(disable : 4005)
-#include <zing/imgui_glm.h>
+#include <zest/math/imgui_glm.h>
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
-#include <zing/imgui_glm.h>
 
 #pragma warning(default : 4005)
 #include <SDL.h>
@@ -17,11 +16,11 @@
 
 #include "demo.h"
 
-#include <zing/logger/logger.h>
-#include <zing/setting.h>
+#include <zest/logger/logger.h>
+#include <zest/settings/settings.h>
 
 namespace fs = std::filesystem;
-using namespace Zing;
+using namespace Zest;
 
 // #define IMGUI_UNLIMITED_FRAME_RATE
 #ifdef _DEBUG
@@ -42,7 +41,7 @@ static ImGui_ImplVulkanH_Window g_MainWindowData;
 static uint32_t g_MinImageCount = 2;
 static bool g_SwapChainRebuild = false;
 
-namespace Zing {
+namespace Zest {
 #undef ERROR
 #ifdef _DEBUG
 Logger logger = { true, LT::DBG };

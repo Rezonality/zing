@@ -10,25 +10,11 @@ find_package(tomlplusplus CONFIG REQUIRED)
 find_package(date CONFIG REQUIRED)
 
 set(ZING_SOURCE
-    ${ZING_ROOT}/src/setting.cpp
-
-    ${ZING_ROOT}/src/imgui/imgui_utils.cpp
-    ${ZING_ROOT}/include/zing/imgui/imgui_utils.h
-
-    ${ZING_ROOT}/src/time/timer.cpp
-    ${ZING_ROOT}/include/zing/time/timer.h
 
     ${ZING_ROOT}/project.natvis
 
     ${ZING_ROOT}/src/wavetable/wavetable.cpp
     ${ZING_ROOT}/src/wavetable/wavetable.h
-
-    ${ZING_ROOT}/include/zing/imgui_glm.h
-    ${ZING_ROOT}/include/zing/math_utils.h
-
-    ${ZING_ROOT}/src/string/string_utils.cpp
-    ${ZING_ROOT}/include/zing/string/string_utils.h
-    ${ZING_ROOT}/include/zing/string/murmur_hash.h
 
     # Audio
     ${ZING_ROOT}/src/audio/audio.cpp
@@ -38,6 +24,8 @@ set(ZING_SOURCE
     ${ZING_ROOT}/include/zing/audio/audio_device_settings.h
 )
 
+SET(ZEST_DIR ${ZING_ROOT}/libs/zing)
+SET(SOUNDPIPE_DIR ${ZING_ROOT}/libs/soundpipe)
 SET(SOUNDPIPE_DIR ${ZING_ROOT}/libs/soundpipe)
 SET(SOUNDPIPE_EXTENSIONS_DIR ${ZING_ROOT}/libs/soundpipe_extensions)
 
@@ -78,6 +66,8 @@ list(APPEND TEST_SOURCES
 add_library(Zing STATIC ${ZING_SOURCE})
 add_library(Zing::Zing ALIAS Zing)
 
+include_directories(${ZEST_DIR}/libs ${ZEST_DIR}/include)
+
 target_compile_definitions(Zing
     PUBLIC
     NO_LIBSNDFILE
@@ -87,6 +77,7 @@ target_link_libraries(Zing
 PRIVATE
     tomlplusplus::tomlplusplus
 PUBLIC
+    Zest::Zest
     unofficial::concurrentqueue::concurrentqueue
     unofficial::kissfft::kissfft
     fmt::fmt-header-only
@@ -113,6 +104,8 @@ PUBLIC
     $<BUILD_INTERFACE:${SOUNDPIPE_EXTENSIONS_DIR}>
     $<BUILD_INTERFACE:${ZING_ROOT}/include>
     $<BUILD_INTERFACE:${ZING_ROOT}/tomlplusplus/include>
+    $<BUILD_INTERFACE:${ZEST_DIR}/libs>
+    $<BUILD_INTERFACE:${ZEST_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 

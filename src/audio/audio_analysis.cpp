@@ -7,7 +7,8 @@
 
 #include <zing/audio/audio_analysis.h>
 #include <zing/audio/audio_analysis_settings.h>
-#include <zing/logger/logger.h>
+
+#include <zest/logger/logger.h>
 
 #include <zing/audio/audio.h>
 
@@ -42,7 +43,7 @@ void audio_analysis_create_all()
     auto& ctx = Zing::GetAudioContext();
 
     // Initialize the analysis
-    for (auto channel = 0; channel < ctx.inputState.channelCount; channel++)
+    for (uint32_t channel = 0; channel < ctx.inputState.channelCount; channel++)
     {
         if (ctx.analysisChannels.size() <= channel)
         {

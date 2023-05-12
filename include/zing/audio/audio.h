@@ -8,9 +8,9 @@
 #include <functional>
 
 #include <concurrentqueue/concurrentqueue.h>
-#include <zing/logger/logger.h>
+#include <zest/logger/logger.h>
+#include <zest/memory/memory.h>
 
-#include <zing/memory.h>
 #include <zing/audio/audio_analysis_settings.h>
 #include <zing/audio/audio_device_settings.h>
 

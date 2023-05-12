@@ -37,6 +37,8 @@ set(ZING_ROOT ${CMAKE_CURRENT_LIST_DIR})
 set(M3RDPARTY_DIR ${CMAKE_CURRENT_LIST_DIR}/m3rdparty)
 set(ZING_INCLUDE_DIR include/)
 
+set(ZEST_BUILD_TESTS off)
+
 configure_file(${CMAKE_CURRENT_LIST_DIR}/cmake/config_app.h.cmake ${CMAKE_BINARY_DIR}/config_app.h)
 
 include(GNUInstallDirs)
@@ -44,6 +46,7 @@ include(GNUInstallDirs)
 enable_testing()
 
 include(cmake/all.cmake)
+add_subdirectory(libs/zest)
 add_subdirectory(src)
 add_subdirectory(app)
 add_subdirectory(tests)

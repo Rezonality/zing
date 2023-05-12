@@ -1,6 +1,6 @@
 if(BUILD_TESTS)
 
-project(unittests
+project(Zing_UnitTests
     LANGUAGES CXX C
     VERSION 0.5.0
 )
@@ -25,26 +25,27 @@ set (TEST_SOURCES
     ${TEST_SOURCES}
     )
 
-add_executable(unittests ${TEST_SOURCES})
+add_executable(${PROJECT_NAME} ${TEST_SOURCES})
 
-target_include_directories(unittests PRIVATE
+target_include_directories(${PROJECT_NAME} PRIVATE
     ${M3RDPARTY_DIR}
     ${CMAKE_BINARY_DIR}
     include
     )
 
-target_link_libraries(unittests
+target_link_libraries(${PROJECT_NAME}
     PRIVATE
         Zing::Zing
+        Zest::Zest
         Catch2::Catch2
         Catch2::Catch2WithMain
         ${PLATFORM_LINKLIBS}
         ${CMAKE_THREAD_LIBS_INIT})
 
-add_test(unittests unittests)
+add_test(${PROJECT_NAME} ${PROJECT_NAME})
 
-install(TARGETS unittests
-    EXPORT mutils-targets
+install(TARGETS Zing_UnitTests
+    EXPORT zing-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}

@@ -46,8 +46,6 @@ target_compile_definitions(${APP_NAME}
     NO_LIBSNDFILE
     _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING)
 
-add_dependencies(${APP_NAME} unittests)
-
 if (WIN32)
     copy_existing_files(${PROJECT_NAME} "${RESOURCE_DEPLOY_FILES}" ${CMAKE_CURRENT_BINARY_DIR}/$(Configuration) )
 endif()
