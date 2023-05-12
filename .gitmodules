@@ -1,3 +1,6 @@
 [submodule "vcpkg"]
 	path = vcpkg
 	url = https://github.com/Microsoft/vcpkg
+[submodule "libs/zest"]
+	path = libs/zest
+	url = https://github.com/Rezonality/zest
