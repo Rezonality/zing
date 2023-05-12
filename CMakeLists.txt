@@ -39,7 +39,7 @@ set(ZING_INCLUDE_DIR include/)
 
 set(ZEST_BUILD_TESTS off)
 
-configure_file(${CMAKE_CURRENT_LIST_DIR}/cmake/config_app.h.cmake ${CMAKE_BINARY_DIR}/config_app.h)
+configure_file(${CMAKE_CURRENT_LIST_DIR}/cmake/config_zing_app.h.cmake ${CMAKE_BINARY_DIR}/config_zing_app.h)
 
 include(GNUInstallDirs)
 
@@ -48,8 +48,11 @@ enable_testing()
 include(cmake/all.cmake)
 add_subdirectory(libs/zest)
 add_subdirectory(src)
+
+if (NOT ${ZING_LIBRARY_ONLY})
 add_subdirectory(app)
 add_subdirectory(tests)
+endif()
 
 # Make the CMake bits that ensure find_package does the right thing
 install(EXPORT zing-targets
