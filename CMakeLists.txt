@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.2)
 message(STATUS " CMakeLists: Zing")
 
 option(BUILD_TESTS "Build Tests" ON)
+option(ZING_LIBRARY_ONLY "Only build library" OFF)
 
 # Global Settings
 set(CMAKE_CXX_STANDARD 17)
