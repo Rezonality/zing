@@ -1,7 +1,9 @@
 #include <chrono>
 #include <cmath>
 #include <glm/gtc/constants.hpp>
-#include <imgui.h>
+
+#include <zest/math/imgui_glm.h>
+
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
 //#include <zing/memory.h>
