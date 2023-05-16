@@ -371,12 +371,29 @@ int main(int, char**)
 
     settings.Load(fs::path(ZING_ROOT) / "settings.toml");
 
+    SDL_DisplayMode mode;
+    SDL_GetDesktopDisplayMode(0, &mode);
+
     auto windowSize = settings.GetVec2f(s_windowSize);
+    auto windowPosition = settings.GetVec2i(s_windowPosition);
+
     if (windowSize.x == 0 || windowSize.y == 0)
     {
         windowSize.x = 1280;
         windowSize.y = 720;
     }
+    
+    if (windowPosition.x == 0 || windowPosition.y == 0)
+    {
+        windowPosition.x = SDL_WINDOWPOS_CENTERED;
+        windowPosition.y = SDL_WINDOWPOS_CENTERED;
+    }
+
+    windowSize.x = std::clamp(windowSize.x, 100.0f, float(mode.w));
+    windowSize.y = std::clamp(windowSize.y, 100.0f, float(mode.h));
+    
+    //windowPosition.x = std::clamp(windowPosition.x, 0.0f, float(mode.w));
+    //windowPosition.y = std::clamp(windowPosition.y, 0.0f, float(mode.h));
 
     bool max = settings.GetBool(b_windowMaximized);
 
@@ -387,7 +404,7 @@ int main(int, char**)
         window_flags = SDL_WindowFlags(window_flags | SDL_WindowFlags::SDL_WINDOW_MAXIMIZED);
     }
 
-    SDL_Window* window = SDL_CreateWindow("zing", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, int(windowSize.x), int(windowSize.y), window_flags);
+    SDL_Window* window = SDL_CreateWindow("zing", windowPosition.x, windowPosition.y, int(windowSize.x), int(windowSize.y), window_flags);
     if (!window)
     {
         printf("%s\n", SDL_GetError());
@@ -597,6 +614,10 @@ int main(int, char**)
 
     SDL_GetWindowSize(window, &w, &h);
     settings.Set(s_windowSize, glm::vec2(w, h));
+    
+    SDL_GetWindowPosition(window, &w, &h);
+    settings.Set(s_windowPosition, glm::ivec2(w, h));
+
     settings.Set(b_windowMaximized, bool(SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED));
 
     SDL_DestroyWindow(window);
