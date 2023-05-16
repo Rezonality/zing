@@ -4,7 +4,7 @@
 #include <memory>
 #include <zing/audio/audio.h>
 
-#include <config_app.h>
+#include <config_zing_app.h>
 using namespace Zing;
 namespace fs = std::filesystem;
 
