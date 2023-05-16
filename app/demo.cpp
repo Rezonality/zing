@@ -3,9 +3,6 @@
 #include <zest/math/imgui_glm.h>
 #include <memory>
 #include <zing/audio/audio.h>
-extern "C" {
-#include <soundpipe/h/soundpipe.h>
-}
 
 #include <config_app.h>
 using namespace Zing;

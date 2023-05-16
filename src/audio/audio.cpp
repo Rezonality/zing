@@ -78,11 +78,14 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     const double sampleRate = static_cast<double>(ctx.outputState.sampleRate);
     const auto bufferDuration = duration_cast<microseconds>(duration<double>{ nBufferFrames / sampleRate });
     const auto latency = duration_cast<microseconds>(duration<double>{ timeInfo->outputBufferDacTime });
-    // const auto hostTime = ctx.m_hostTimeFilter.sampleTimeToHostTime(device->m_sampleTime);
+
+    // Link
+    const auto hostTime = ctx.m_hostTimeFilter.sampleTimeToHostTime(ctx.m_sampleTime);
     ctx.m_sampleTime += nBufferFrames;
-    // const auto bufferBeginAtOutput = hostTime + latency;
+
+    const auto bufferBeginAtOutput = hostTime + latency;
+
     auto samples = (float*)outputBuffer;
-    // const auto bufferBeginAtOutput = std::chrono::microseconds(long(timeInfo->currentTime * 1000000));
 
     // Ensure TP has same tempo
     // TimeProvider::Instance().SetTempo(sessionState.tempo(), 4.0);
@@ -355,9 +358,76 @@ void audio_enumerate_devices()
     audio_dump_devices();
 }
 
+/*
+void maud_set_channels_rate(int channels, uint32_t rate)
+{
+    CHECK_NOT_AUDIO_THREAD;
+
+    LOCK_GUARD(maud.active_graph_mutex, SetGraphActive_Lock);
+
+    std::vector<AudioGraph*> inactive;
+    while (!maud.activeGraphs.empty())
+    {
+        auto pGraph = (*maud.activeGraphs.begin());
+        pGraph->SetActiveLockHeld(false);
+        inactive.push_back(pGraph);
+    }
+
+    if (maud.outputGraph)
+    {
+        maud.outputGraph->SetActiveLockHeld(false);
+    }
+
+    maud.sampleRate = rate;
+    maud.deltaTime = 1.0f / float(rate);
+    maud.outputChannels = channels;
+
+    if (maud.pSP)
+    {
+        sp_destroy(&maud.pSP);
+        maud.pSP = nullptr;
+    }
+
+    sp_create(&maud.pSP);
+    maud.pSP->nchan = channels;
+    maud.pSP->sr = maud.sampleRate;
+
+    for (auto& pGraph : maud.inactiveGraphs)
+    {
+        for (auto& pNode : pGraph->GetNodes())
+        {
+            auto pAudioNode = dynamic_cast<NodeAudioBase*>(pNode);
+            if (pAudioNode)
+            {
+                pAudioNode->Reset();
+            }
+        }
+    }
+
+    // Resize all channels in the pool
+    if (maud.spDevice)
+    {
+        auto maxFrameSize = maud.audioDeviceSettings.frames;
+
+    }
+
+    // Restore outside lock
+    for (auto& pGraph : inactive)
+    {
+        pGraph->SetActiveLockHeld(true);
+    }
+
+    if (maud.outputGraph)
+    {
+        maud.outputGraph->SetActiveLockHeld(true);
+    }
+}
+*/
 void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t outputRate, uint32_t inputRate)
 {
     auto& ctx = audioContext;
+    CHECK_NOT_AUDIO_THREAD;
+
     ctx.outputState.sampleRate = outputRate;
     ctx.outputState.deltaTime = 1.0f / float(outputRate);
     ctx.outputState.channelCount = outputChannels;
@@ -372,15 +442,15 @@ void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t out
     // I don't know if these can be different from a device point of view; so for now they always match
     assert(outputRate == inputRate);
 
-    // if (ctx.pSP)
+    if (ctx.pSP)
     {
-        //  sp_destroy(&ctx.pSP);
-        //   ctx.pSP = nullptr;
+        sp_destroy(&ctx.pSP);
+        ctx.pSP = nullptr;
     }
 
-    // sp_create(&ctx.pSP);
-    // ctx.pSP->nchan = channels;
-    // ctx.pSP->sr = ctx.sampleRate;
+    sp_create(&ctx.pSP);
+    ctx.pSP->nchan = ctx.outputState.channelCount;
+    ctx.pSP->sr = ctx.outputState.sampleRate;
 }
 
 void audio_destroy()
@@ -398,6 +468,12 @@ void audio_destroy()
     }
 
     Pa_Terminate();
+    
+    if (ctx.pSP)
+    {
+        sp_destroy(&ctx.pSP);
+        ctx.pSP = nullptr;
+    }
 }
 
 bool audio_init(const AudioCB& fnCallback)
@@ -472,7 +548,7 @@ bool audio_init(const AudioCB& fnCallback)
     auto ret = Pa_OpenStream(&ctx.m_pStream, ctx.audioDeviceSettings.enableInput ? &ctx.m_inputParams : nullptr, ctx.audioDeviceSettings.enableOutput ? &ctx.m_outputParams : nullptr, ctx.audioDeviceSettings.sampleRate, ctx.audioDeviceSettings.frames, flags, audio_tick, nullptr);
     if (ret != paNoError)
     {
-        LOG(ERROR, Pa_GetErrorText(ret));
+        LOG(ERR, Pa_GetErrorText(ret));
         return true;
     }
 
@@ -481,7 +557,7 @@ bool audio_init(const AudioCB& fnCallback)
     {
         Pa_CloseStream(ctx.m_pStream);
         ctx.m_pStream = nullptr;
-        LOG(ERROR, Pa_GetErrorText(ret));
+        LOG(ERR, Pa_GetErrorText(ret));
         return true;
     }
 

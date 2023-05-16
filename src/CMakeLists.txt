@@ -8,6 +8,7 @@ find_package(Vulkan REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(date CONFIG REQUIRED)
+find_path(ABLETON_LINK_INCLUDE_DIRS "ableton/link.hpp")
 
 set(ZING_SOURCE
 
@@ -79,7 +80,7 @@ PRIVATE
 PUBLIC
     Zest::Zest
     unofficial::concurrentqueue::concurrentqueue
-    unofficial::kissfft::kissfft
+    #unofficial::kissfft::kissfft
     fmt::fmt-header-only
     glm::glm
     Vulkan::Vulkan
@@ -88,11 +89,18 @@ PUBLIC
     date::date
     date::date-tz)
 
+target_precompile_headers(Zing
+  PRIVATE
+    ${ZING_ROOT}/include/zing/audio/audio.h
+)
+set_source_files_properties (${SOUNDPIPE_SOURCE} PROPERTIES SKIP_PRECOMPILE_HEADERS 1)
+
 target_include_directories(Zing
 PRIVATE
     ${CMAKE_BINARY_DIR}
 PUBLIC
     $<BUILD_INTERFACE:${ZING_ROOT}/libs>
+    $<BUILD_INTERFACE:${ABLETON_LINK_INCLUDE_DIRS}>
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/h>
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/dr_wav>
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/faust>

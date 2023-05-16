@@ -139,7 +139,7 @@ bool audio_analysis_init(AudioAnalysis& analysis, AudioAnalysisData& analysisDat
         analysisData.audio[buf].resize(ctx.audioAnalysisSettings.frames, 0.0f);
     }
 
-    analysis.cfg = mkiss::kiss_fft_alloc(ctx.audioAnalysisSettings.frames, 0, 0, 0);
+    analysis.cfg = kiss_fft_alloc(ctx.audioAnalysisSettings.frames, 0, 0, 0);
 
     return true;
 }
@@ -209,7 +209,7 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
             // assert(std::isfinite(analysis.fftIn[i].real()));
         }
 
-        mkiss::kiss_fft(analysis.cfg, (const mkiss::kiss_fft_cpx*)&analysis.fftIn[0], (mkiss::kiss_fft_cpx*)&analysis.fftOut[0]);
+        kiss_fft(analysis.cfg, (const kiss_fft_cpx*)&analysis.fftIn[0], (kiss_fft_cpx*)&analysis.fftOut[0]);
 
         // 0 for imaginary part
         analysis.fftOut[0] = std::complex(analysis.fftOut[0].real(), 0.0f);

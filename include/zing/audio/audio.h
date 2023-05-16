@@ -14,10 +14,20 @@
 #include <zing/audio/audio_analysis_settings.h>
 #include <zing/audio/audio_device_settings.h>
 
-namespace mkiss
-{
-#include <kiss_fft.h>
+extern "C" {
+#include <soundpipe/h/soundpipe.h>
 }
+
+#ifdef WIN32
+#define LINK_PLATFORM_WINDOWS
+#endif
+#include <ableton/link/HostTimeFilter.hpp>
+#include <ableton/platforms/Config.hpp>
+
+//namespace mkiss
+//{
+#include <kiss_fft.h>
+//}
 
 union SDL_Event;
 
@@ -97,7 +107,7 @@ inline bool operator==(const SpectrumPartitionSettings& a, const SpectrumPartiti
 struct AudioAnalysis
 {
     // FFT
-    mkiss::kiss_fft_cfg cfg;
+    kiss_fft_cfg cfg;
     std::vector<std::complex<float>> fftIn;
     std::vector<std::complex<float>> fftOut;
     std::vector<float> fftMag;
@@ -162,6 +172,9 @@ struct AudioContext
     std::vector<std::string> m_currentRateNames;
     std::vector<uint32_t> m_currentRates;
 
+    // SoundPipe
+    sp_data* pSP = nullptr;
+
     // PortAudio
     PaStreamParameters m_inputParams;
     PaStreamParameters m_outputParams;
@@ -169,6 +182,9 @@ struct AudioContext
     
     // Bundles of audio data passed out of the audio thread to analysis
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioBundle>> spareBundles;
+
+    // Link
+    ableton::link::HostTimeFilter<ableton::link::platform::Clock> m_hostTimeFilter;
 };
 
 AudioContext& GetAudioContext();
@@ -184,5 +200,10 @@ void audio_show_gui();
 
 std::shared_ptr<AudioBundle> audio_get_bundle();
 void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle);
+
+#define CHECK_NOT_AUDIO_THREAD assert(std::this_thread::get_id() != ctx.threadId);
+
+// Can't currently use this one since audio threads might be in a pool.  TLS?
+#define CHECK_AUDIO_THREAD assert(std::this_thread::get_id() == ctx.threadId);
 
 } // namespace Zing

@@ -63,7 +63,7 @@ inline AudioDeviceSettings audiodevice_load_settings(const toml::table& settings
     }
     catch (std::exception & ex)
     {
-        LOG(ERROR, ex.what());
+        LOG(ERR, ex.what());
     }
     return deviceSettings;
 }
