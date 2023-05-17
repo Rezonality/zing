@@ -4,12 +4,13 @@
 #include <glm/gtc/constants.hpp>
 
 #include <zest/math/imgui_glm.h>
+#include <zest/include/zest/ui/imgui_extras.h>
+#include <zest/time/profiler.h>
 
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
 // #include <zing/memory.h>
 
-#include <zest/include/zest/ui/imgui_extras.h>
 
 using namespace std::chrono;
 using namespace ableton;
@@ -209,8 +210,8 @@ void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput,
 int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBufferFrames, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* dataPointer)
 {
     auto& ctx = audioContext;
-    // PROFILE_REGION(Audio);
-    // PROFILE_NAME_THREAD(Audio);
+    PROFILE_REGION(Audio);
+    PROFILE_NAME_THREAD(Audio);
 
     if (!ctx.m_audioValid)
     {
@@ -640,7 +641,7 @@ bool audio_init(const AudioCB& fnCallback)
     audio_validate_settings();
 
     // Set the max region for our audio profile candles to be the max time we think we have to collect the audio data
-    // MUtils::Profiler::SetRegionLimit(((duration_cast<nanoseconds>(seconds(1)).count()) * ctx.audioDeviceSettings.frames / ctx.audioDeviceSettings.sampleRate));
+    Zest::Profiler::SetRegionLimit(((duration_cast<nanoseconds>(seconds(1)).count()) * ctx.audioDeviceSettings.frames / ctx.audioDeviceSettings.sampleRate));
 
     if (!ctx.audioDeviceSettings.enableInput && !ctx.audioDeviceSettings.enableOutput)
     {

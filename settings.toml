@@ -1,4 +1,5 @@
 ['Default Setting']
-b_windowMaximized = false
-s_windowPosition = [ 586, 363 ]
-s_windowSize = [ 2334.0, 1516.0 ]
+b_windowMaximized = true
+'murmur:0' = [ 0.0, 0.0, 0.0, 0.0 ]
+s_windowPosition = [ 0, 56 ]
+s_windowSize = [ 3840.0, 2224.0 ]

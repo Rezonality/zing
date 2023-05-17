@@ -1,5 +1,7 @@
 #pragma warning(disable : 4005)
 #include <zest/math/imgui_glm.h>
+#include <zest/time/profiler.h>
+
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
 
@@ -360,6 +362,8 @@ static void FramePresent(ImGui_ImplVulkanH_Window* wd)
 // A plain old vulkan window.  Just to get an IMGUI surface
 int main(int, char**)
 {
+    Zest::Profiler::Init();
+
     // Setup SDL
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
     {
@@ -538,6 +542,8 @@ int main(int, char**)
     bool demo_start = true;
     while (!done)
     {
+        Zest::Profiler::NewFrame();
+
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
         // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application.
@@ -625,5 +631,6 @@ int main(int, char**)
 
     GlobalSettingManager::Instance().Save(fs::path(ZING_ROOT) / "settings.toml");
 
+    Zest::Profiler::Finish();
     return 0;
 }

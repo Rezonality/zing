@@ -9,6 +9,7 @@
 #include <zing/audio/audio_analysis_settings.h>
 
 #include <zest/logger/logger.h>
+#include <zest/time/profiler.h>
 
 #include <zing/audio/audio.h>
 
@@ -146,7 +147,7 @@ bool audio_analysis_init(AudioAnalysis& analysis, AudioAnalysisData& analysisDat
 
 void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
 {
-    // PROFILE_SCOPE(Audio_Analysis);
+    PROFILE_SCOPE(Audio_Analysis);
     auto& ctx = GetAudioContext();
 
     auto frameOffset = 0; // ctx.audioAnalysisSettings.removeFFTJitter ? (uint32_t)-_lastPeakHarmonic & ~0x1 : 0;
@@ -239,7 +240,7 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
 
 void audio_analysis_calculate_audio(AudioAnalysis& analysis, AudioAnalysisData& analysisData)
 {
-    // PROFILE_SCOPE(Analysis_Audio);
+    PROFILE_SCOPE(Analysis_Audio);
     auto& ctx = GetAudioContext();
 
     // TODO: This can't be right?
@@ -283,7 +284,7 @@ void audio_analysis_calculate_audio(AudioAnalysis& analysis, AudioAnalysisData& 
 
 void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisData& analysisData)
 {
-    // PROFILE_SCOPE(CalculateSpectrum);
+    PROFILE_SCOPE(CalculateSpectrum);
     auto& ctx = GetAudioContext();
 
     float minSpec = std::numeric_limits<float>::max();
@@ -434,7 +435,7 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
 // For example, vec4.x might end up containing 0->500Hz, vec4.y might be 500-1000Hz, etc.
 void audio_analysis_calculate_spectrum_bands(AudioAnalysis& analysis, AudioAnalysisData& analysisData)
 {
-    // PROFILE_SCOPE(Analysis_Bands);
+    PROFILE_SCOPE(Analysis_Bands);
     auto& ctx = GetAudioContext();
 
     auto blendFactor = 1.0f;

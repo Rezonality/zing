@@ -2,9 +2,12 @@
 #include <fmt/format.h>
 #include <memory>
 #include <zest/math/imgui_glm.h>
+#include <zest/time/profiler.h>
+
 #include <zing/audio/audio.h>
 
 #include <config_zing_app.h>
+
 using namespace Zing;
 namespace fs = std::filesystem;
 
@@ -51,6 +54,11 @@ void demo_draw_analysis()
 void demo_draw()
 {
     demo_draw_analysis();
+
+    ImGui::Begin("Profiler");
+    static bool open = true;
+    Zest::Profiler::ShowProfile(&open);
+    ImGui::End();
 
     ImGui::Begin("Audio Settings");
     audio_show_gui();
