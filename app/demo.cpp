@@ -1,7 +1,7 @@
 #include <filesystem>
 #include <fmt/format.h>
-#include <zest/math/imgui_glm.h>
 #include <memory>
+#include <zest/math/imgui_glm.h>
 #include <zing/audio/audio.h>
 
 #include <config_zing_app.h>
@@ -13,7 +13,8 @@ namespace {
 
 void demo_init()
 {
-    audio_init(nullptr);
+    audio_init([](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
+    });
 }
 
 void demo_draw_analysis()

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <glm/gtc/constants.hpp>
@@ -6,22 +7,21 @@
 
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
-//#include <zing/memory.h>
+// #include <zing/memory.h>
 
 #include <zest/include/zest/ui/imgui_extras.h>
 
 using namespace std::chrono;
+using namespace ableton;
 
-namespace Zing
-{
+namespace Zing {
 void audio_validate_rates();
 void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t outputRate, uint32_t inputRate);
 void audio_enumerate_devices();
 void audio_dump_devices();
 void audio_validate_settings();
 
-namespace
-{
+namespace {
 
 std::vector<uint32_t> frameSizes{ 128, 256, 512, 1024, 2048, 4096 };
 std::vector<std::string> frameNames{ "128", "256", "512", "1024", "2048", "4096" };
@@ -56,6 +56,153 @@ void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle)
     audioContext.spareBundles.enqueue(pBundle);
 }
 
+LinkData audio_pull_link_data()
+{
+    auto& ctx = audioContext;
+    auto linkData = LinkData{};
+    if (ctx.m_linkDataGuard.try_lock())
+    {
+        linkData.requestedTempo = ctx.m_linkData.requestedTempo;
+        ctx.m_linkData.requestedTempo = 0;
+        linkData.requestStart = ctx.m_linkData.requestStart;
+        ctx.m_linkData.requestStart = false;
+        linkData.requestStop = ctx.m_linkData.requestStop;
+        ctx.m_linkData.requestStop = false;
+
+        ctx.m_lockFreeLinkData.quantum = ctx.m_linkData.quantum;
+        ctx.m_lockFreeLinkData.startStopSyncOn = ctx.m_linkData.startStopSyncOn;
+
+        ctx.m_linkDataGuard.unlock();
+    }
+    linkData.quantum = ctx.m_lockFreeLinkData.quantum;
+
+    return linkData;
+}
+
+void audio_play_metronome(const Link::SessionState sessionState, const double quantum, const std::chrono::microseconds beginHostTime, void* pOutput, const std::size_t numSamples)
+{
+    auto& ctx = audioContext;
+    using namespace std::chrono;
+
+    // Metronome frequencies
+    static const double highTone = 1567.98f;
+    static const double lowTone = 1108.73f;
+    // 100ms click duration
+    static const auto clickDuration = duration<double>{ 0.1 };
+
+    // The number of microseconds that elapse between samples
+    const auto microsPerSample = 1e6 / ctx.outputState.sampleRate;
+
+    auto pOut = (float*)pOutput;
+    for (std::size_t i = 0; i < numSamples; ++i)
+    {
+        float amplitude = 0.0f;
+        // Compute the host time for this sample and the last.
+        const auto hostTime = beginHostTime + microseconds(llround(static_cast<double>(i) * microsPerSample));
+        const auto lastSampleHostTime = hostTime - microseconds(llround(microsPerSample));
+
+        // Only make sound for positive beat magnitudes. Negative beat
+        // magnitudes are count-in beats.
+        if (sessionState.beatAtTime(hostTime, quantum) >= 0.)
+        {
+            // If the phase wraps around between the last sample and the
+            // current one with respect to a 1 beat quantum, then a click
+            // should occur.
+            if (sessionState.phaseAtTime(hostTime, 1)
+                < sessionState.phaseAtTime(lastSampleHostTime, 1))
+            {
+                ctx.m_timeAtLastClick = hostTime;
+            }
+
+            const auto secondsAfterClick = duration_cast<duration<double>>(hostTime - ctx.m_timeAtLastClick);
+
+            // If we're within the click duration of the last beat, render
+            // the click tone into this sample
+            if (secondsAfterClick < clickDuration)
+            {
+                // If the phase of the last beat with respect to the current
+                // quantum was zero, then it was at a quantum boundary and we
+                // want to use the high tone. For other beats within the
+                // quantum, use the low tone.
+                const auto freq = floor(sessionState.phaseAtTime(hostTime, quantum)) == 0 ? highTone : lowTone;
+
+                auto sec = secondsAfterClick.count();
+                // Simple cosine synth
+                amplitude = float(cos(2 * glm::pi<double>() * sec * freq)
+                    * (1 - sin(5 * glm::pi<double>() * sec)));
+            }
+        }
+
+        for (uint32_t ch = 0; ch < ctx.outputState.channelCount; ch++)
+        {
+            *pOut++ = amplitude;
+        }
+    }
+}
+
+void audio_start_playing()
+{
+    auto& ctx = audioContext;
+    std::lock_guard<std::mutex> lock(ctx.m_linkDataGuard);
+    ctx.m_linkData.requestStart = true;
+    ctx.m_link.enable(true);
+}
+
+void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)
+{
+    auto& ctx = audioContext;
+    const auto engineData = audio_pull_link_data();
+
+    auto sessionState = ctx.m_link.captureAudioSessionState();
+
+    /*
+    if (frameCount != 0 && pOutput)
+    {
+        // Clear the buffer
+        //float* pOut = (float*)pOutput;
+        //std::fill(pOut, &pOut[frameCount * ctx.outputState.channelCount], 0.0f);
+    }
+    */
+
+    if (engineData.requestStart)
+    {
+        sessionState.setIsPlaying(true, hostTime);
+    }
+
+    if (engineData.requestStop)
+    {
+        sessionState.setIsPlaying(false, hostTime);
+    }
+
+    if (!ctx.m_isPlaying && sessionState.isPlaying())
+    {
+        // Reset the timeline so that beat 0 corresponds to the time when transport starts
+        sessionState.requestBeatAtStartPlayingTime(0, engineData.quantum);
+        ctx.m_isPlaying = true;
+    }
+    else if (ctx.m_isPlaying && !sessionState.isPlaying())
+    {
+        ctx.m_isPlaying = false;
+    }
+
+    if (engineData.requestedTempo > 0)
+    {
+        // Set the newly requested tempo from the beginning of this buffer
+        sessionState.setTempo(engineData.requestedTempo, hostTime);
+    }
+
+    // Timeline modifications are complete, commit the results
+    ctx.m_link.commitAudioSessionState(sessionState);
+
+    if (ctx.m_isPlaying && pOutput)
+    {
+        // As long as the engine is playing, generate metronome clicks in
+        // the buffer at the appropriate beats.
+        audio_play_metronome(sessionState, engineData.quantum, hostTime, pOutput, frameCount);
+        LOG(DBG, "Q: " << engineData.quantum);
+    }
+}
+
 // This tick() function handles sample computation only.  It will be
 // called automatically when the system needs a new buffer of audio
 // samples.
@@ -77,45 +224,26 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     double deltaTime = 1.0f / (double)ctx.outputState.sampleRate;
     const double sampleRate = static_cast<double>(ctx.outputState.sampleRate);
     const auto bufferDuration = duration_cast<microseconds>(duration<double>{ nBufferFrames / sampleRate });
-    const auto latency = duration_cast<microseconds>(duration<double>{ timeInfo->outputBufferDacTime });
 
     // Link
     const auto hostTime = ctx.m_hostTimeFilter.sampleTimeToHostTime(ctx.m_sampleTime);
-    ctx.m_sampleTime += nBufferFrames;
-
-    const auto bufferBeginAtOutput = hostTime + latency;
+    ctx.m_sampleTime += double(nBufferFrames);
+    const auto bufferBeginAtOutput = hostTime + ctx.m_outputLatency.load();
 
     auto samples = (float*)outputBuffer;
 
     // Ensure TP has same tempo
     // TimeProvider::Instance().SetTempo(sessionState.tempo(), 4.0);
 
+    audio_pre_callback(hostTime, outputBuffer, nBufferFrames);
+
     if (ctx.m_isPlaying)
     {
         if (outputBuffer)
         {
-            float beatAtTime = 0.0f;
-            float quantum = 0.0f;
-            std::chrono::microseconds hostTime(0);
-
-            /*
-            static double step = 0.0f;
-            float* pOut = (float*)(outputBuffer);
-            for (uint32_t i = 0; i < nBufferFrames; i++)
-            {
-                for (uint32_t ch = 0; ch < ctx.outputState.channelCount; ch++)
-                {
-                    pOut[ch] = float(sin(2.0 * glm::pi<double>() * 440.0 * step ));
-                }
-                pOut += ctx.outputState.channelCount;
-                step += deltaTime;
-            }
-            */
-
-            //memset(outputBuffer, 0, nBufferFrames * ctx.outputState.channelCount * sizeof(float));
             if (ctx.m_fnCallback)
             {
-                ctx.m_fnCallback(beatAtTime, quantum, hostTime, outputBuffer, inputBuffer, nBufferFrames);
+                ctx.m_fnCallback(bufferBeginAtOutput, outputBuffer, nBufferFrames);
             }
         }
     }
@@ -468,7 +596,7 @@ void audio_destroy()
     }
 
     Pa_Terminate();
-    
+
     if (ctx.pSP)
     {
         sp_destroy(&ctx.pSP);
@@ -545,6 +673,9 @@ bool audio_init(const AudioCB& fnCallback)
 
     PaStreamFlags flags = paNoFlag;
 
+    // Link
+    ctx.m_outputLatency.store(std::chrono::microseconds(llround(ctx.m_outputParams.suggestedLatency * 1.0e6)));
+
     auto ret = Pa_OpenStream(&ctx.m_pStream, ctx.audioDeviceSettings.enableInput ? &ctx.m_inputParams : nullptr, ctx.audioDeviceSettings.enableOutput ? &ctx.m_outputParams : nullptr, ctx.audioDeviceSettings.sampleRate, ctx.audioDeviceSettings.frames, flags, audio_tick, nullptr);
     if (ret != paNoError)
     {
@@ -569,6 +700,9 @@ bool audio_init(const AudioCB& fnCallback)
     audio_analysis_create_all();
 
     ctx.m_audioValid = true;
+
+    audio_start_playing();
+
     return true;
 }
 
@@ -743,7 +877,7 @@ void audio_show_gui()
             analysisSettings.frames = frameSizes[frameIndex];
             audioResetRequired = true;
         }
-        
+
         auto spectrumBucketsIndex = getFrameIndex(analysisSettings.spectrumBuckets);
         if (Combo("Spectrum Buckets", &spectrumBucketsIndex, frameNames))
         {
@@ -772,7 +906,7 @@ void audio_show_gui()
             // No need to reset the device
             analysisSettings.logPartitions = logPartitions;
         }
-        
+
         ImGui::SliderFloat("Spectrum Log Curve", &analysisSettings.spectrumSharpness, 2.0f, 100.0f);
 
         bool blendFFT = analysisSettings.blendFFT;
@@ -822,7 +956,7 @@ void audio_show_gui()
 
     if (audioResetRequired)
     {
-        audio_init(nullptr);
+        audio_init(ctx.m_fnCallback);
     }
 
     if (!ctx.m_audioValid)

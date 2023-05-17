@@ -23,6 +23,7 @@ extern "C" {
 #endif
 #include <ableton/link/HostTimeFilter.hpp>
 #include <ableton/platforms/Config.hpp>
+#include <ableton/Link.hpp>
 
 //namespace mkiss
 //{
@@ -44,7 +45,7 @@ struct AudioSettings
     std::atomic<bool> enableMetronome = false;
 };
 
-using AudioCB = std::function<void(const double beat, const double quantum, std::chrono::microseconds hostTime, void* pOutput, const void* pInput, uint32_t frameCount)>;
+using AudioCB = std::function<void(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)>;
 
 /*
 struct DeviceInfo
@@ -141,6 +142,15 @@ struct AudioAnalysis
 
 };
 
+struct LinkData
+{
+    double requestedTempo = 60.0;
+    bool requestStart = false;
+    bool requestStop = false;
+    double quantum = 4.0;
+    bool startStopSyncOn = true;
+};
+
 struct AudioContext
 {
     bool m_initialized = false;
@@ -164,7 +174,7 @@ struct AudioContext
     std::atomic<uint64_t> analysisWriteGeneration = 0;
     std::atomic<uint64_t> analysisReadGeneration = 0;
 
-    uint64_t m_sampleTime = 0;
+    double m_sampleTime = 0.0;
     std::thread::id threadId;
     std::vector<std::string> m_deviceNames;
     std::vector<std::string> m_apiNames;
@@ -184,7 +194,13 @@ struct AudioContext
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioBundle>> spareBundles;
 
     // Link
+    std::atomic<std::chrono::microseconds> m_outputLatency;
     ableton::link::HostTimeFilter<ableton::link::platform::Clock> m_hostTimeFilter;
+    std::mutex m_linkDataGuard;
+    LinkData m_linkData;
+    LinkData m_lockFreeLinkData;
+    ableton::Link m_link = ableton::Link(20.0);
+    std::chrono::microseconds m_timeAtLastClick;    // Metronome
 };
 
 AudioContext& GetAudioContext();
