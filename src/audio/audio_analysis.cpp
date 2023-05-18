@@ -81,6 +81,7 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
     analysis.exited = false;
     analysis.quitThread = false;
     analysis.analysisThread = std::move(std::thread([=]() {
+
         const auto wakeUpDelta = std::chrono::milliseconds(10);
         for (;;)
         {
@@ -94,6 +95,7 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
             if (!pAnalysis->processBundles.try_dequeue(spData))
             {
                 // Sleep
+                PROFILE_NAME_THREAD(Analysis);
                 std::this_thread::sleep_for(wakeUpDelta);
                 continue;
             }
@@ -203,34 +205,37 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
     //   https://github.com/beautypi/shadertoy-iOS-v2/blob/master/shadertoy/SoundStreamHelper.m
     if (analysis.audioActive)
     {
-        for (uint32_t i = 0; i < ctx.audioAnalysisSettings.frames; i++)
         {
-            // Hamming window, FF
-            analysis.fftIn[i] = std::complex(audioBuffer[i] * analysis.window[i], 0.0f);
-            // assert(std::isfinite(analysis.fftIn[i].real()));
+            PROFILE_SCOPE(FFT);
+            for (uint32_t i = 0; i < ctx.audioAnalysisSettings.frames; i++)
+            {
+                // Hamming window, FF
+                analysis.fftIn[i] = std::complex(audioBuffer[i] * analysis.window[i], 0.0f);
+                // assert(std::isfinite(analysis.fftIn[i].real()));
+            }
+
+            kiss_fft(analysis.cfg, (const kiss_fft_cpx*)&analysis.fftIn[0], (kiss_fft_cpx*)&analysis.fftOut[0]);
+
+            // 0 for imaginary part
+            analysis.fftOut[0] = std::complex(analysis.fftOut[0].real(), 0.0f);
+
+            float scale = 1.0f / (ctx.audioAnalysisSettings.frames * 2);
+
+            for (uint32_t i = 1; i < analysis.outputSamples; i++)
+            {
+                analysis.fftOut[i] = analysis.fftOut[i] * scale;
+            }
+
+            // Sample 0 has the sum of all terms and isn't useful to us.
+            analysis.fftOut[0] = std::complex(0.0f, 0.0f);
+
+            // Convert to dB
+            for (uint32_t i = 1; i < analysis.outputSamples; i++)
+            {
+                analysis.fftMag[i] = std::norm(analysis.fftOut[i]);
+            }
+            analysis.fftMag[0] = 0.0f;
         }
-
-        kiss_fft(analysis.cfg, (const kiss_fft_cpx*)&analysis.fftIn[0], (kiss_fft_cpx*)&analysis.fftOut[0]);
-
-        // 0 for imaginary part
-        analysis.fftOut[0] = std::complex(analysis.fftOut[0].real(), 0.0f);
-
-        float scale = 1.0f / (ctx.audioAnalysisSettings.frames * 2);
-
-        for (uint32_t i = 1; i < analysis.outputSamples; i++)
-        {
-            analysis.fftOut[i] = analysis.fftOut[i] * scale;
-        }
-
-        // Sample 0 has the sum of all terms and isn't useful to us.
-        analysis.fftOut[0] = std::complex(0.0f, 0.0f);
-
-        // Convert to dB
-        for (uint32_t i = 1; i < analysis.outputSamples; i++)
-        {
-            analysis.fftMag[i] = std::norm(analysis.fftOut[i]);
-        }
-        analysis.fftMag[0] = 0.0f;
 
         audio_analysis_calculate_spectrum(analysis, analysisData);
     }
@@ -240,7 +245,7 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
 
 void audio_analysis_calculate_audio(AudioAnalysis& analysis, AudioAnalysisData& analysisData)
 {
-    PROFILE_SCOPE(Analysis_Audio);
+    PROFILE_SCOPE(Audio);
     auto& ctx = GetAudioContext();
 
     // TODO: This can't be right?
@@ -284,7 +289,7 @@ void audio_analysis_calculate_audio(AudioAnalysis& analysis, AudioAnalysisData& 
 
 void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisData& analysisData)
 {
-    PROFILE_SCOPE(CalculateSpectrum);
+    PROFILE_SCOPE(Spectrum);
     auto& ctx = GetAudioContext();
 
     float minSpec = std::numeric_limits<float>::max();
@@ -435,7 +440,7 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
 // For example, vec4.x might end up containing 0->500Hz, vec4.y might be 500-1000Hz, etc.
 void audio_analysis_calculate_spectrum_bands(AudioAnalysis& analysis, AudioAnalysisData& analysisData)
 {
-    PROFILE_SCOPE(Analysis_Bands);
+    PROFILE_SCOPE(Bands);
     auto& ctx = GetAudioContext();
 
     auto blendFactor = 1.0f;

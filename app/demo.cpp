@@ -3,6 +3,7 @@
 #include <memory>
 #include <zest/math/imgui_glm.h>
 #include <zest/time/profiler.h>
+#include <zest/settings/settings.h>
 
 #include <zing/audio/audio.h>
 
@@ -25,7 +26,7 @@ void demo_draw_analysis()
     auto& audioContext = GetAudioContext();
 
     size_t bufferWidth = 512; // default width if no data
-    const auto Channels = std::max(audioContext.analysisChannels.size(), size_t(1));
+    const auto Channels = audioContext.analysisChannels.size();
     const auto BufferTypes = 2; // Spectrum + Audio
     const auto BufferHeight = Channels * BufferTypes;
 
@@ -54,6 +55,8 @@ void demo_draw_analysis()
 void demo_draw()
 {
     demo_draw_analysis();
+
+    Zest::GlobalSettingManager::Instance().DrawGUI("Settings");
 
     ImGui::Begin("Profiler");
     static bool open = true;

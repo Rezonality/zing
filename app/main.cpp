@@ -543,6 +543,8 @@ int main(int, char**)
     while (!done)
     {
         Zest::Profiler::NewFrame();
+    
+        PROFILE_NAME_THREAD(UI);
 
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.

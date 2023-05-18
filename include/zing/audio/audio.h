@@ -201,6 +201,11 @@ struct AudioContext
     LinkData m_lockFreeLinkData;
     ableton::Link m_link = ableton::Link(20.0);
     std::chrono::microseconds m_timeAtLastClick;    // Metronome
+    bool m_clicking = false;
+    double m_clickFrequency;
+    double m_clickTime = 0.0;
+    int64_t m_lastClickBeat = 0;
+
 };
 
 AudioContext& GetAudioContext();

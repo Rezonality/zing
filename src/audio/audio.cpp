@@ -3,14 +3,13 @@
 #include <cmath>
 #include <glm/gtc/constants.hpp>
 
-#include <zest/math/imgui_glm.h>
 #include <zest/include/zest/ui/imgui_extras.h>
+#include <zest/math/imgui_glm.h>
 #include <zest/time/profiler.h>
 
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
 // #include <zing/memory.h>
-
 
 using namespace std::chrono;
 using namespace ableton;
@@ -82,56 +81,62 @@ LinkData audio_pull_link_data()
 
 void audio_play_metronome(const Link::SessionState sessionState, const double quantum, const std::chrono::microseconds beginHostTime, void* pOutput, const std::size_t numSamples)
 {
+    PROFILE_SCOPE(Metronome);
+
     auto& ctx = audioContext;
     using namespace std::chrono;
 
     // Metronome frequencies
     static const double highTone = 1567.98f;
     static const double lowTone = 1108.73f;
+
     // 100ms click duration
     static const auto clickDuration = duration<double>{ 0.1 };
 
     // The number of microseconds that elapse between samples
     const auto microsPerSample = 1e6 / ctx.outputState.sampleRate;
+    const auto fracSec = (1.0 / (double)ctx.outputState.sampleRate);
 
     auto pOut = (float*)pOutput;
+
     for (std::size_t i = 0; i < numSamples; ++i)
     {
         float amplitude = 0.0f;
+
         // Compute the host time for this sample and the last.
         const auto hostTime = beginHostTime + microseconds(llround(static_cast<double>(i) * microsPerSample));
-        const auto lastSampleHostTime = hostTime - microseconds(llround(microsPerSample));
 
         // Only make sound for positive beat magnitudes. Negative beat
         // magnitudes are count-in beats.
-        if (sessionState.beatAtTime(hostTime, quantum) >= 0.)
+        auto beat = sessionState.beatAtTime(hostTime, quantum);
+        if (int64_t(beat) > ctx.m_lastClickBeat)
         {
-            // If the phase wraps around between the last sample and the
-            // current one with respect to a 1 beat quantum, then a click
-            // should occur.
-            if (sessionState.phaseAtTime(hostTime, 1)
-                < sessionState.phaseAtTime(lastSampleHostTime, 1))
-            {
-                ctx.m_timeAtLastClick = hostTime;
-            }
-
-            const auto secondsAfterClick = duration_cast<duration<double>>(hostTime - ctx.m_timeAtLastClick);
+            ctx.m_lastClickBeat = int64_t(beat);
 
             // If we're within the click duration of the last beat, render
             // the click tone into this sample
-            if (secondsAfterClick < clickDuration)
+            if (!ctx.m_clicking)
             {
-                // If the phase of the last beat with respect to the current
-                // quantum was zero, then it was at a quantum boundary and we
-                // want to use the high tone. For other beats within the
-                // quantum, use the low tone.
-                const auto freq = floor(sessionState.phaseAtTime(hostTime, quantum)) == 0 ? highTone : lowTone;
-
-                auto sec = secondsAfterClick.count();
-                // Simple cosine synth
-                amplitude = float(cos(2 * glm::pi<double>() * sec * freq)
-                    * (1 - sin(5 * glm::pi<double>() * sec)));
+                ctx.m_clickFrequency = floor(sessionState.phaseAtTime(hostTime, quantum)) == 0 ? highTone : lowTone;
+                ctx.m_clickTime = 0.0;
+                ctx.m_clicking = true;
             }
+        }
+
+        if (ctx.m_clicking)
+        {
+            // Simple cosine synth
+            amplitude = float(cos(2 * glm::pi<double>() * ctx.m_clickTime * ctx.m_clickFrequency) * (1 - sin(5 * glm::pi<double>() * ctx.m_clickTime)));
+            ctx.m_clickTime += fracSec;
+
+            if (ctx.m_clickTime > 0.1)
+            {
+                ctx.m_clicking = false;
+            }
+        }
+        else
+        {
+            amplitude = 0.0;
         }
 
         for (uint32_t ch = 0; ch < ctx.outputState.channelCount; ch++)
@@ -144,7 +149,7 @@ void audio_play_metronome(const Link::SessionState sessionState, const double qu
 void audio_start_playing()
 {
     auto& ctx = audioContext;
-    std::lock_guard<std::mutex> lock(ctx.m_linkDataGuard);
+    LOCK_GUARD(ctx.m_linkDataGuard, LinkDataGuard);
     ctx.m_linkData.requestStart = true;
     ctx.m_link.enable(true);
 }
@@ -155,15 +160,6 @@ void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput,
     const auto engineData = audio_pull_link_data();
 
     auto sessionState = ctx.m_link.captureAudioSessionState();
-
-    /*
-    if (frameCount != 0 && pOutput)
-    {
-        // Clear the buffer
-        //float* pOut = (float*)pOutput;
-        //std::fill(pOut, &pOut[frameCount * ctx.outputState.channelCount], 0.0f);
-    }
-    */
 
     if (engineData.requestStart)
     {
@@ -200,7 +196,6 @@ void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput,
         // As long as the engine is playing, generate metronome clicks in
         // the buffer at the appropriate beats.
         audio_play_metronome(sessionState, engineData.quantum, hostTime, pOutput, frameCount);
-        LOG(DBG, "Q: " << engineData.quantum);
     }
 }
 
@@ -213,8 +208,17 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     PROFILE_REGION(Audio);
     PROFILE_NAME_THREAD(Audio);
 
+    PROFILE_SCOPE(Tick);
+
+    auto fracSec = (nBufferFrames / (double)ctx.outputState.sampleRate);
+    static const uint64_t oneSecondNs = uint64_t(duration_cast<nanoseconds>(seconds(1)).count());
+
+    // Set the max region for our audio profile candles to be the max time we think we have to collect the audio data
+    Zest::Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs));
+
     if (!ctx.m_audioValid)
     {
+        assert(!"Eh?");
         return 0;
     }
 
@@ -487,71 +491,6 @@ void audio_enumerate_devices()
     audio_dump_devices();
 }
 
-/*
-void maud_set_channels_rate(int channels, uint32_t rate)
-{
-    CHECK_NOT_AUDIO_THREAD;
-
-    LOCK_GUARD(maud.active_graph_mutex, SetGraphActive_Lock);
-
-    std::vector<AudioGraph*> inactive;
-    while (!maud.activeGraphs.empty())
-    {
-        auto pGraph = (*maud.activeGraphs.begin());
-        pGraph->SetActiveLockHeld(false);
-        inactive.push_back(pGraph);
-    }
-
-    if (maud.outputGraph)
-    {
-        maud.outputGraph->SetActiveLockHeld(false);
-    }
-
-    maud.sampleRate = rate;
-    maud.deltaTime = 1.0f / float(rate);
-    maud.outputChannels = channels;
-
-    if (maud.pSP)
-    {
-        sp_destroy(&maud.pSP);
-        maud.pSP = nullptr;
-    }
-
-    sp_create(&maud.pSP);
-    maud.pSP->nchan = channels;
-    maud.pSP->sr = maud.sampleRate;
-
-    for (auto& pGraph : maud.inactiveGraphs)
-    {
-        for (auto& pNode : pGraph->GetNodes())
-        {
-            auto pAudioNode = dynamic_cast<NodeAudioBase*>(pNode);
-            if (pAudioNode)
-            {
-                pAudioNode->Reset();
-            }
-        }
-    }
-
-    // Resize all channels in the pool
-    if (maud.spDevice)
-    {
-        auto maxFrameSize = maud.audioDeviceSettings.frames;
-
-    }
-
-    // Restore outside lock
-    for (auto& pGraph : inactive)
-    {
-        pGraph->SetActiveLockHeld(true);
-    }
-
-    if (maud.outputGraph)
-    {
-        maud.outputGraph->SetActiveLockHeld(true);
-    }
-}
-*/
 void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t outputRate, uint32_t inputRate)
 {
     auto& ctx = audioContext;
@@ -609,7 +548,6 @@ bool audio_init(const AudioCB& fnCallback)
 {
     auto& ctx = audioContext;
 
-    ctx.m_audioValid = false;
     ctx.m_fnCallback = fnCallback;
 
     audio_analysis_destroy_all();
@@ -636,12 +574,11 @@ bool audio_init(const AudioCB& fnCallback)
         ctx.m_pStream = nullptr;
     }
 
+    ctx.m_audioValid = false;
+
     const auto& getAPI = [&]() { return ctx.m_mapApis[ctx.audioDeviceSettings.apiIndex]; };
 
     audio_validate_settings();
-
-    // Set the max region for our audio profile candles to be the max time we think we have to collect the audio data
-    Zest::Profiler::SetRegionLimit(((duration_cast<nanoseconds>(seconds(1)).count()) * ctx.audioDeviceSettings.frames / ctx.audioDeviceSettings.sampleRate));
 
     if (!ctx.audioDeviceSettings.enableInput && !ctx.audioDeviceSettings.enableOutput)
     {
