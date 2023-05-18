@@ -2,8 +2,8 @@
 #include <fmt/format.h>
 #include <memory>
 #include <zest/math/imgui_glm.h>
-#include <zest/time/profiler.h>
 #include <zest/settings/settings.h>
+#include <zest/time/profiler.h>
 
 #include <zing/audio/audio.h>
 
@@ -56,13 +56,16 @@ void demo_draw()
 {
     demo_draw_analysis();
 
+    // Settings
     Zest::GlobalSettingManager::Instance().DrawGUI("Settings");
 
+    // Profiler
     ImGui::Begin("Profiler");
     static bool open = true;
     Zest::Profiler::ShowProfile(&open);
     ImGui::End();
 
+    // Audio and link
     ImGui::Begin("Audio Settings");
     audio_show_gui();
     ImGui::End();

@@ -205,7 +205,8 @@ struct AudioContext
     double m_clickFrequency;
     double m_clickTime = 0.0;
     int64_t m_lastClickBeat = 0;
-
+    double m_tempo;
+    int m_numPeers;
 };
 
 AudioContext& GetAudioContext();

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <fmt/format.h>
 #include <glm/gtc/constants.hpp>
 
 #include <zest/include/zest/ui/imgui_extras.h>
@@ -550,6 +551,21 @@ bool audio_init(const AudioCB& fnCallback)
 
     ctx.m_fnCallback = fnCallback;
 
+    ctx.m_link.setTempoCallback([](auto tempo) {
+        auto& ctx = audioContext;
+        ctx.m_tempo = tempo;
+    });
+
+    ctx.m_link.setNumPeersCallback([](auto numPeers) {
+        auto& ctx = audioContext;
+        ctx.m_numPeers = int(numPeers);
+    });
+
+    ctx.m_link.setStartStopCallback([](auto isPlaying) {
+        //auto& ctx = audioContext;
+        //ctx.m_isPlaying = isPlaying;
+    });
+
     audio_analysis_destroy_all();
 
     // One duration initialization of the API and devices
@@ -888,6 +904,40 @@ void audio_show_gui()
         ctx.audioAnalysisSettings = AudioAnalysisSettings{};
         audioResetRequired = true;
     }
+
+    using namespace std;
+
+    auto session = ctx.m_link.captureAppSessionState();
+
+    const auto time = ctx.m_link.clock().micros();
+    const auto beats = session.beatAtTime(time, ctx.m_lockFreeLinkData.quantum);
+    const auto phase = session.phaseAtTime(time, ctx.m_lockFreeLinkData.quantum);
+    const auto enabled = ctx.m_link.isEnabled() ? "Yes" : "No";
+    const auto startStop = ctx.m_lockFreeLinkData.startStopSyncOn ? "Yes" : "No";
+    const auto isPlaying = session.isPlaying() ? "[Playing]" : "[Stopped]";
+
+    std::ostringstream str;
+    str << "Link:" << std::endl;
+    str << "Enabled | Num peers | Quantum | Start stop sync | Tempo   | Beats   | Metro" << std::endl;
+
+    str << defaultfloat << left << setw(7) << enabled << " | " << setw(9) << ctx.m_numPeers
+         << " | " << setw(7) << ctx.m_lockFreeLinkData.quantum << " | " << setw(3) << startStop << " " << setw(11)
+         << isPlaying << " | " << fixed << setw(7) << int(ctx.m_tempo) << " | " << fixed
+         << setprecision(2) << setw(7) << beats << " | ";
+
+    for (int i = 0; i < ceil(ctx.m_lockFreeLinkData.quantum); ++i)
+    {
+        if (i < phase)
+        {
+            str << 'X';
+        }
+        else
+        {
+            str << 'O';
+        }
+    }
+    
+    ImGui::Button(str.str().c_str());
 
     // Ensure sensible
     audio_analysis_validate_settings(analysisSettings);
