@@ -1,6 +1,12 @@
 #pragma warning(disable : 4005)
 #include <zest/math/imgui_glm.h>
 #include <zest/time/profiler.h>
+#include <zest/logger/logger.h>
+#include <zest/settings/settings.h>
+#include <zest/file/runtree.h>
+#include <zest/file/file.h>
+
+#include <zing/audio/audio.h>
 
 #include <imgui_impl_sdl2.h>
 #include <imgui_impl_vulkan.h>
@@ -17,9 +23,6 @@
 #include <fmt/format.h>
 
 #include "demo.h"
-
-#include <zest/logger/logger.h>
-#include <zest/settings/settings.h>
 
 namespace fs = std::filesystem;
 using namespace Zest;
@@ -371,15 +374,18 @@ int main(int, char**)
         return -1;
     }
 
-    auto& settings = GlobalSettingManager::Instance();
 
-    settings.Load(fs::path(ZING_ROOT) / "settings.toml");
+    auto settings_path = Zest::file_init_settings("zing", Zest::runtree_find_path("settings.toml"), fs::path("settings") / "settings.toml");
+    
+    auto& settings = GlobalSettingsManager::Instance();
+    Zing::audio_add_settings_hooks();
+    settings.Load(settings_path);
 
     SDL_DisplayMode mode;
     SDL_GetDesktopDisplayMode(0, &mode);
 
-    auto windowSize = settings.GetVec2f(s_windowSize);
-    auto windowPosition = settings.GetVec2i(s_windowPosition);
+    auto windowSize = settings.GetVec2f(g_window, s_windowSize);
+    auto windowPosition = settings.GetVec2i(g_window, s_windowPosition);
 
     if (windowSize.x == 0 || windowSize.y == 0)
     {
@@ -399,7 +405,7 @@ int main(int, char**)
     //windowPosition.x = std::clamp(windowPosition.x, 0.0f, float(mode.w));
     //windowPosition.y = std::clamp(windowPosition.y, 0.0f, float(mode.h));
 
-    bool max = settings.GetBool(b_windowMaximized);
+    bool max = settings.GetBool(g_window, b_windowMaximized);
 
     // Setup window
     SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
@@ -621,17 +627,17 @@ int main(int, char**)
     CleanupVulkan();
 
     SDL_GetWindowSize(window, &w, &h);
-    settings.Set(s_windowSize, glm::vec2(w, h));
+    settings.Set(g_window, s_windowSize, glm::vec2(w, h));
     
     SDL_GetWindowPosition(window, &w, &h);
-    settings.Set(s_windowPosition, glm::ivec2(w, h));
+    settings.Set(g_window, s_windowPosition, glm::ivec2(w, h));
 
-    settings.Set(b_windowMaximized, bool(SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED));
+    settings.Set(g_window, b_windowMaximized, bool(SDL_GetWindowFlags(window) & SDL_WINDOW_MAXIMIZED));
 
     SDL_DestroyWindow(window);
     SDL_Quit();
 
-    GlobalSettingManager::Instance().Save(fs::path(ZING_ROOT) / "settings.toml");
+    GlobalSettingsManager::Instance().Save(settings_path);
 
     Zest::Profiler::Finish();
     return 0;

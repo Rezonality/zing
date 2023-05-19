@@ -21,7 +21,7 @@ struct AudioAnalysisSettings
     bool removeFFTJitter = false;
     glm::uvec4 spectrumFrequencies = glm::uvec4(100, 500, 3000, 10000);
     glm::vec4 spectrumGains = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-    float audioDecibelRange = 70.0f;
+    float audioDecibelRange = 110.0f;
 };
 
 inline AudioAnalysisSettings audioanalysis_load_settings(const toml::table& settings)

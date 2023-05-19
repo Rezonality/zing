@@ -216,6 +216,7 @@ inline glm::uvec4 Div(const glm::uvec4& val, uint32_t div)
     return glm::uvec4(val.x / div, val.y / div, val.z / div, val.w / div);
 }
 
+void audio_add_settings_hooks();
 bool audio_init(const AudioCB& fnCallback);
 void audio_destroy();
 void audio_show_gui();

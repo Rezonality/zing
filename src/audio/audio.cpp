@@ -7,29 +7,45 @@
 #include <zest/include/zest/ui/imgui_extras.h>
 #include <zest/math/imgui_glm.h>
 #include <zest/time/profiler.h>
+#include <zest/settings/settings.h>
+
 
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
-// #include <zing/memory.h>
+#include <zing/audio/audio_device_settings.h>
+#include <zing/audio/audio_analysis_settings.h>
 
 using namespace std::chrono;
 using namespace ableton;
+using namespace Zest;
 
-namespace Zing {
+namespace Zing
+{
 void audio_validate_rates();
 void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t outputRate, uint32_t inputRate);
 void audio_enumerate_devices();
 void audio_dump_devices();
 void audio_validate_settings();
 
-namespace {
+namespace
+{
 
-std::vector<uint32_t> frameSizes{ 128, 256, 512, 1024, 2048, 4096 };
-std::vector<std::string> frameNames{ "128", "256", "512", "1024", "2048", "4096" };
+std::vector<uint32_t> frameSizes{128, 256, 512, 1024, 2048, 4096};
+std::vector<std::string> frameNames{"128", "256", "512", "1024", "2048", "4096"};
 std::vector<double> sampleRates = {
-    8000.0, 9600.0, 11025.0, 12000.0, 16000.0, 22050.0, 24000.0, 32000.0,
-    44100.0, 48000.0, 88200.0, 96000.0, 192000.0
-};
+    8000.0,
+    9600.0,
+    11025.0,
+    12000.0,
+    16000.0,
+    22050.0,
+    24000.0,
+    32000.0,
+    44100.0,
+    48000.0,
+    88200.0,
+    96000.0,
+    192000.0};
 
 uint32_t defaultFrameIndex = 1;
 AudioContext audioContext;
@@ -92,7 +108,7 @@ void audio_play_metronome(const Link::SessionState sessionState, const double qu
     static const double lowTone = 1108.73f;
 
     // 100ms click duration
-    static const auto clickDuration = duration<double>{ 0.1 };
+    static const auto clickDuration = duration<double>{0.1};
 
     // The number of microseconds that elapse between samples
     const auto microsPerSample = 1e6 / ctx.outputState.sampleRate;
@@ -215,7 +231,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     static const uint64_t oneSecondNs = uint64_t(duration_cast<nanoseconds>(seconds(1)).count());
 
     // Set the max region for our audio profile candles to be the max time we think we have to collect the audio data
-    Zest::Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs));
+    Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs));
 
     if (!ctx.m_audioValid)
     {
@@ -229,7 +245,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
 
     double deltaTime = 1.0f / (double)ctx.outputState.sampleRate;
     const double sampleRate = static_cast<double>(ctx.outputState.sampleRate);
-    const auto bufferDuration = duration_cast<microseconds>(duration<double>{ nBufferFrames / sampleRate });
+    const auto bufferDuration = duration_cast<microseconds>(duration<double>{nBufferFrames / sampleRate});
 
     // Link
     const auto hostTime = ctx.m_hostTimeFilter.sampleTimeToHostTime(ctx.m_sampleTime);
@@ -507,6 +523,15 @@ void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t out
     ctx.inputState.channelCount = inputChannels;
     ctx.inputState.totalFrames = 0;
 
+    if (!ctx.audioDeviceSettings.enableInput)
+    {
+        ctx.inputState.channelCount = 0;
+    }
+
+    if (!ctx.audioDeviceSettings.enableOutput)
+    {
+        ctx.outputState.channelCount = 0;
+    }
     // Note inputRate is currently always == outputRate
     // I don't know if these can be different from a device point of view; so for now they always match
     assert(outputRate == inputRate);
@@ -543,6 +568,39 @@ void audio_destroy()
         sp_destroy(&ctx.pSP);
         ctx.pSP = nullptr;
     }
+}
+
+void audio_add_settings_hooks()
+{
+
+    SettingsClient client;
+    client.pfnLoad = [](const std::string& location, const toml::table& tbl) -> bool {
+        auto& ctx = audioContext;
+
+        if (location == "audio.analysis")
+        {
+            ctx.audioAnalysisSettings = audioanalysis_load_settings(tbl);
+            return true;
+        }
+        else if (location == "audio.device")
+        {
+            ctx.audioDeviceSettings = audiodevice_load_settings(tbl);
+            return true;
+        }
+
+        return false;
+    };
+
+    client.pfnSave = [](toml::table& tbl) {
+        auto& ctx = audioContext;
+
+        auto audio = toml_sub_table(tbl, "audio");
+        audio->insert("analysis", audioanalysis_save_settings(ctx.audioAnalysisSettings));
+        audio->insert("device", audiodevice_save_settings(ctx.audioDeviceSettings));
+    };
+    
+    auto& settings = Zest::GlobalSettingsManager::Instance();
+    settings.AddClient(client);
 }
 
 bool audio_init(const AudioCB& fnCallback)
@@ -612,6 +670,10 @@ bool audio_init(const AudioCB& fnCallback)
         ctx.m_outputParams.hostApiSpecificStreamInfo = nullptr;
         ctx.m_outputParams.sampleFormat = paFloat32;
         ctx.m_outputParams.suggestedLatency = outDeviceInfo->defaultLowOutputLatency;
+        if (!ctx.audioDeviceSettings.enableOutput)
+        {
+            ctx.m_outputParams.channelCount = 0;
+        }
     }
 
     if (ctx.audioDeviceSettings.inputDevice >= 0)
@@ -623,6 +685,10 @@ bool audio_init(const AudioCB& fnCallback)
         ctx.m_inputParams.hostApiSpecificStreamInfo = nullptr;
         ctx.m_inputParams.sampleFormat = paFloat32;
         ctx.m_inputParams.suggestedLatency = inDeviceInfo->defaultLowInputLatency;
+        if (!ctx.audioDeviceSettings.enableInput)
+        {
+            ctx.m_inputParams.channelCount = 0;
+        }
     }
 
     PaStreamFlags flags = paNoFlag;
@@ -735,7 +801,8 @@ bool Combo(const char* label, int* current_item, const std::vector<std::string>&
             *out_text = (*(const std::vector<std::string>*)data)[idx].c_str();
             return true;
         },
-        (void*)&items, int(items.size()));
+        (void*)&items,
+        int(items.size()));
 }
 
 void audio_show_gui()
@@ -921,9 +988,9 @@ void audio_show_gui()
     str << "Enabled | Num peers | Quantum | Start stop sync | Tempo   | Beats   | Metro" << std::endl;
 
     str << defaultfloat << left << setw(7) << enabled << " | " << setw(9) << ctx.m_numPeers
-         << " | " << setw(7) << ctx.m_lockFreeLinkData.quantum << " | " << setw(3) << startStop << " " << setw(11)
-         << isPlaying << " | " << fixed << setw(7) << int(ctx.m_tempo) << " | " << fixed
-         << setprecision(2) << setw(7) << beats << " | ";
+        << " | " << setw(7) << ctx.m_lockFreeLinkData.quantum << " | " << setw(3) << startStop << " " << setw(11)
+        << isPlaying << " | " << fixed << setw(7) << int(ctx.m_tempo) << " | " << fixed
+        << setprecision(2) << setw(7) << beats << " | ";
 
     for (int i = 0; i < ceil(ctx.m_lockFreeLinkData.quantum); ++i)
     {
@@ -936,7 +1003,7 @@ void audio_show_gui()
             str << 'O';
         }
     }
-    
+
     ImGui::Button(str.str().c_str());
 
     // Ensure sensible
