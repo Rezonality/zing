@@ -118,7 +118,7 @@ void demo_draw()
 
     ImGui::SeparatorText("Test");
     ImGui::BeginDisabled(ctx.outputState.channelCount == 0 ? true : false);
-    ImGui::Checkbox("Beep", &playNote);
+    ImGui::Checkbox("Tone", &playNote);
     ImGui::EndDisabled();
 
     ImGui::SeparatorText("Analysis");
