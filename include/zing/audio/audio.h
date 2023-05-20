@@ -23,7 +23,7 @@ extern "C" {
 #define LINK_PLATFORM_WINDOWS
 #elif defined __APPLE__
 #define LINK_PLATFORM_MACOSX
-#elif defined __linux__
+#else
 #define LINK_PLATFORM_LINUX
 #endif
 #include <ableton/link/HostTimeFilter.hpp>
