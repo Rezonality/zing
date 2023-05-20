@@ -80,7 +80,6 @@ PRIVATE
 PUBLIC
     Zest::Zest
     unofficial::concurrentqueue::concurrentqueue
-    #unofficial::kissfft::kissfft
     fmt::fmt
     glm::glm
     Vulkan::Vulkan
@@ -88,6 +87,10 @@ PUBLIC
     imgui::imgui
     date::date
     date::date-tz)
+
+if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
+    target_link_libraries(Zing PUBLIC atomic)
+endif()
 
 target_precompile_headers(Zing
   PRIVATE
