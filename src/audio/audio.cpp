@@ -836,7 +836,6 @@ void audio_show_link_gui()
     ImGui::TableSetupColumn("Name");
     ImGui::TableSetupColumn("Value");
 
-    ImGui::TableHeadersRow();
     ImGui::TableNextRow();
 
     ImGui::TableSetColumnIndex(0);

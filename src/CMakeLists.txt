@@ -8,7 +8,7 @@ find_package(Vulkan REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(date CONFIG REQUIRED)
-find_path(ABLETON_LINK_INCLUDE_DIRS "ableton/link.hpp")
+find_path(ABLETON_LINK_INCLUDE_DIRS "ableton/Link.hpp")
 
 set(ZING_SOURCE
 
