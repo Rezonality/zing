@@ -73,7 +73,6 @@ void demo_draw_analysis()
     const auto BufferTypes = 2; // Spectrum + Audio
     const auto BufferHeight = Channels * BufferTypes;
 
-    ImGui::Begin("Audio Analysis");
     for (int channel = 0; channel < Channels; channel++)
     {
         auto& analysis = audioContext.analysisChannels[channel];
@@ -87,17 +86,15 @@ void demo_draw_analysis()
 
         if (!spectrumBuckets.empty())
         {
-            ImVec2 plotSize(400, 200);
+            ImVec2 plotSize(300, 100);
             ImGui::PlotLines(fmt::format("Spectrum: {}", channel).c_str(), &spectrumBuckets[0], static_cast<int>(spectrumBuckets.size()), 0, NULL, 0.0f, 1.0f, plotSize);
             ImGui::PlotLines(fmt::format("Audio: {}", channel).c_str(), &audio[0], static_cast<int>(audio.size()), 0, NULL, -1.0f, 1.0f, plotSize);
         }
     }
-    ImGui::End();
 }
 
 void demo_draw()
 {
-    demo_draw_analysis();
 
     // Settings
     Zest::GlobalSettingsManager::Instance().DrawGUI("Settings");
@@ -110,14 +107,23 @@ void demo_draw()
 
     // Audio and link
     ImGui::Begin("Audio Settings");
-    audio_show_gui();
+    audio_show_settings_gui();
     ImGui::End();
 
     auto& ctx = GetAudioContext();
-    ImGui::Begin("Synth");
+    ImGui::Begin("Audio");
+    
+    ImGui::SeparatorText("Link");
+    audio_show_link_gui();
+
+    ImGui::SeparatorText("Test");
     ImGui::BeginDisabled(ctx.outputState.channelCount == 0 ? true : false);
     ImGui::Checkbox("Beep", &playNote);
     ImGui::EndDisabled();
+
+    ImGui::SeparatorText("Analysis");
+    demo_draw_analysis();
+
     ImGui::End();
 }
 

@@ -8,6 +8,7 @@
 #include <functional>
 
 #include <concurrentqueue/concurrentqueue.h>
+#include <zest/common.h>
 #include <zest/logger/logger.h>
 #include <zest/memory/memory.h>
 
@@ -20,15 +21,16 @@ extern "C" {
 
 #ifdef WIN32
 #define LINK_PLATFORM_WINDOWS
+#elif defined __APPLE__
+#define LINK_PLATFORM_MACOSX
+#elif defined __linux__
+#define LINK_PLATFORM_LINUX
 #endif
 #include <ableton/link/HostTimeFilter.hpp>
 #include <ableton/platforms/Config.hpp>
 #include <ableton/Link.hpp>
 
-//namespace mkiss
-//{
 #include <kiss_fft.h>
-//}
 
 union SDL_Event;
 
@@ -46,13 +48,6 @@ struct AudioSettings
 };
 
 using AudioCB = std::function<void(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)>;
-
-/*
-struct DeviceInfo
-{
-    std::string fullName;
-};
-*/
 
 struct ApiInfo
 {
@@ -219,7 +214,8 @@ inline glm::uvec4 Div(const glm::uvec4& val, uint32_t div)
 void audio_add_settings_hooks();
 bool audio_init(const AudioCB& fnCallback);
 void audio_destroy();
-void audio_show_gui();
+void audio_show_link_gui();
+void audio_show_settings_gui();
 
 std::shared_ptr<AudioBundle> audio_get_bundle();
 void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle);

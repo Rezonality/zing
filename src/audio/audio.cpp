@@ -805,7 +805,92 @@ bool Combo(const char* label, int* current_item, const std::vector<std::string>&
         int(items.size()));
 }
 
-void audio_show_gui()
+void audio_show_link_gui()
+{
+    using namespace std;
+    auto& ctx = audioContext;
+
+    auto session = ctx.m_link.captureAppSessionState();
+
+    const auto time = ctx.m_link.clock().micros();
+    const auto beats = session.beatAtTime(time, ctx.m_lockFreeLinkData.quantum);
+    const auto phase = session.phaseAtTime(time, ctx.m_lockFreeLinkData.quantum);
+    const auto enabled = ctx.m_link.isEnabled() ? "Yes" : "No";
+    const auto startStop = ctx.m_lockFreeLinkData.startStopSyncOn ? "Yes" : "No";
+    const auto isPlaying = session.isPlaying() ? "[Playing]" : "[Stopped]";
+    std::ostringstream str;
+    for (int i = 0; i < ceil(ctx.m_lockFreeLinkData.quantum); ++i)
+    {
+        if (i < phase)
+        {
+            str << 'X';
+        }
+        else
+        {
+            str << 'O';
+        }
+    }
+
+    ImGui::BeginTable("Ableton Link", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Borders | ImGuiTableFlags_PreciseWidths);
+
+    ImGui::TableSetupColumn("Name");
+    ImGui::TableSetupColumn("Value");
+
+    ImGui::TableHeadersRow();
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("Enabled");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text(enabled);
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("Peers");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text(fmt::format("{}", ctx.m_numPeers).c_str());
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("Quantum");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text(fmt::format("{}", ctx.m_lockFreeLinkData.quantum).c_str());
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("Start/Stop/Sync");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text(startStop);
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("Playing");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text(isPlaying);
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("Tempo");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text(fmt::format("{}", int(ctx.m_tempo)).c_str());
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("Beats");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text(fmt::format("{:.2f}", beats).c_str());
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
+    ImGui::Text("Metro");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::Text(str.str().c_str());
+    ImGui::TableNextRow();
+
+    ImGui::EndTable();
+}
+
+void audio_show_settings_gui()
 {
     auto& ctx = audioContext;
 
@@ -972,39 +1057,6 @@ void audio_show_gui()
         audioResetRequired = true;
     }
 
-    using namespace std;
-
-    auto session = ctx.m_link.captureAppSessionState();
-
-    const auto time = ctx.m_link.clock().micros();
-    const auto beats = session.beatAtTime(time, ctx.m_lockFreeLinkData.quantum);
-    const auto phase = session.phaseAtTime(time, ctx.m_lockFreeLinkData.quantum);
-    const auto enabled = ctx.m_link.isEnabled() ? "Yes" : "No";
-    const auto startStop = ctx.m_lockFreeLinkData.startStopSyncOn ? "Yes" : "No";
-    const auto isPlaying = session.isPlaying() ? "[Playing]" : "[Stopped]";
-
-    std::ostringstream str;
-    str << "Link:" << std::endl;
-    str << "Enabled | Num peers | Quantum | Start stop sync | Tempo   | Beats   | Metro" << std::endl;
-
-    str << defaultfloat << left << setw(7) << enabled << " | " << setw(9) << ctx.m_numPeers
-        << " | " << setw(7) << ctx.m_lockFreeLinkData.quantum << " | " << setw(3) << startStop << " " << setw(11)
-        << isPlaying << " | " << fixed << setw(7) << int(ctx.m_tempo) << " | " << fixed
-        << setprecision(2) << setw(7) << beats << " | ";
-
-    for (int i = 0; i < ceil(ctx.m_lockFreeLinkData.quantum); ++i)
-    {
-        if (i < phase)
-        {
-            str << 'X';
-        }
-        else
-        {
-            str << 'O';
-        }
-    }
-
-    ImGui::Button(str.str().c_str());
 
     // Ensure sensible
     audio_analysis_validate_settings(analysisSettings);
