@@ -13,7 +13,7 @@ if [ "$(uname)" == "Darwin" ]; then
 fi
 
 cd vcpkg
-./vcpkg install tinydir concurrentqueue kissfft stb portaudio date fmt clipp tomlplusplus glm sdl2[vulkan] imgui[sdl2-binding,freetype,vulkan-binding] magic-enum catch2 --triplet ${triplet[0]} --recurse
+./vcpkg install ableton-link tinydir concurrentqueue kissfft stb portaudio date fmt clipp tomlplusplus glm sdl2[vulkan] imgui[sdl2-binding,freetype,vulkan-binding] magic-enum catch2 --triplet ${triplet[0]} --recurse
 if [ "$(uname)" != "Darwin" ]; then
 ./vcpkg install glib --triplet ${triplet[0]} --recurse
 fi

@@ -81,7 +81,7 @@ PUBLIC
     Zest::Zest
     unofficial::concurrentqueue::concurrentqueue
     #unofficial::kissfft::kissfft
-    fmt::fmt-header-only
+    fmt::fmt
     glm::glm
     Vulkan::Vulkan
     portaudio_static

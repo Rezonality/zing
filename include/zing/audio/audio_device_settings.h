@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <zest/common.h>
 #include <zest/file/toml_utils.h>
 #include <zest/logger/logger.h>
 
@@ -63,6 +64,7 @@ inline AudioDeviceSettings audiodevice_load_settings(const toml::table& settings
     }
     catch (std::exception & ex)
     {
+        UNUSED(ex);
         LOG(ERR, ex.what());
     }
     return deviceSettings;

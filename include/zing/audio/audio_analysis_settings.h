@@ -1,6 +1,7 @@
 #pragma once
 
 #include <zest/file/toml_utils.h>
+#include <zest/common.h>
 #include <zest/logger/logger.h>
 
 #undef ERROR
@@ -47,6 +48,7 @@ inline AudioAnalysisSettings audioanalysis_load_settings(const toml::table& sett
     }
     catch (std::exception& ex)
     {
+        UNUSED(ex);
         LOG(ERR, ex.what());
     }
     return analysisSettings;
