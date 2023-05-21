@@ -27,7 +27,6 @@ project(Zing
 
 include(cmake/utils.cmake)
 find_package(unofficial-concurrentqueue CONFIG REQUIRED)
-find_package(unofficial-kissfft CONFIG REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(fmt REQUIRED)
 find_package(freetype CONFIG REQUIRED)
