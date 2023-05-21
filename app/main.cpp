@@ -374,9 +374,12 @@ int main(int, char**)
         return -1;
     }
 
+    Zest::runtree_init(SDL_GetBasePath(), ZING_ROOT);
 
-    auto settings_path = Zest::file_init_settings("zing", Zest::runtree_find_path("settings.toml"), fs::path("settings") / "settings.toml");
+    auto settings_path = Zest::file_init_settings("zing", Zest::runtree_find_path("settings/settings.toml"), fs::path("settings") / "settings.toml");
     
+    auto im_settings_path = Zest::file_init_settings("zing", Zest::runtree_find_path("settings/imgui.ini"), fs::path("settings") / "imgui.ini");
+
     auto& settings = GlobalSettingsManager::Instance();
     Zing::audio_add_settings_hooks();
     settings.Load(settings_path);
@@ -448,6 +451,8 @@ int main(int, char**)
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     (void)io;
+    auto strSettings = im_settings_path.string();
+    io.IniFilename = strSettings.c_str();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
     // io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;

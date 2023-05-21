@@ -1,0 +1,34 @@
+[audio.analysis]
+audio_decibels = 110.0
+blend_factor = 100.0
+blend_fft = true
+dejitter_fft = false
+filter_fft = true
+frames = 4096
+log_partitions = true
+spectrum_buckets = 512
+spectrum_frequencies = [ 100, 500, 3000, 10000 ]
+spectrum_gains = [ 1.0, 1.0, 1.0, 1.0 ]
+spectrum_sharpness = 8.0
+
+[audio.device]
+api = 0
+frames = 1024
+input_channels = 2
+input_device = 0
+input_enable = true
+output_channels = 2
+output_device = 0
+output_enable = true
+sample_rate = 44100
+
+[themes.defaultTheme]
+c_AccentColor1 = [ 1.0, 0.20000000298023224, 0.20000000298023224, 1.0 ]
+c_AccentColor2 = [ 1.0, 0.4000000059604645, 0.4000000059604645, 1.0 ]
+c_Error = [ 1.0, 0.10000000149011612, 0.10000000149011612, 1.0 ]
+c_Warning = [ 0.20000000298023224, 1.0, 0.20000000298023224, 1.0 ]
+
+[window]
+b_windowMaximized = true
+s_windowPosition = [ 0, 56 ]
+s_windowSize = [ 3840.0, 2224.0 ]
