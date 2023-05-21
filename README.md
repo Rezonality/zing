@@ -30,12 +30,17 @@ build.bat OR build.sh
 See prebuilt.bat for the full list
 
 # Sound
-![SoundPipe](https://github.com/shybyte/soundpipe)
-![PortAudio](https://github.com/PortAudio/portaudio)
-![EarLevel](https://www.earlevel.com/main/2012/05/03/a-wavetable-oscillator—introduction)
-![Ableton Link](https://github.com/Ableton/link)
+[SoundPipe](https://github.com/shybyte/soundpipe)
+
+[PortAudio](https://github.com/PortAudio/portaudio)
+
+[EarLevel](https://www.earlevel.com/main/2012/05/03/a-wavetable-oscillatorï¿½introduction)
+
+[Ableton Link](https://github.com/Ableton/link)
 
 # Other
-![ImGui](https://github.com/ocornut/imgui)
-![Concurrent Queue](https://github.com/ikiller1/moodycamel-ConcurrentQueue)
-![TomlPlusPlus](https://github.com/marzer/tomlplusplus)
+[ImGui](https://github.com/ocornut/imgui)
+
+[Concurrent Queue](https://github.com/ikiller1/moodycamel-ConcurrentQueue)
+
+[TomlPlusPlus](https://github.com/marzer/tomlplusplus)
