@@ -831,62 +831,64 @@ void audio_show_link_gui()
         }
     }
 
-    ImGui::BeginTable("Ableton Link", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Borders | ImGuiTableFlags_PreciseWidths);
+    if (ImGui::BeginTable("Ableton Link", 2, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_Borders | ImGuiTableFlags_PreciseWidths))
+    {
 
-    ImGui::TableSetupColumn("Name");
-    ImGui::TableSetupColumn("Value");
+        ImGui::TableSetupColumn("Name");
+        ImGui::TableSetupColumn("Value");
 
-    ImGui::TableNextRow();
+        ImGui::TableNextRow();
 
-    ImGui::TableSetColumnIndex(0);
-    ImGui::Text("Enabled");
-    ImGui::TableSetColumnIndex(1);
-    ImGui::Text(enabled);
-    ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Enabled");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(enabled);
+        ImGui::TableNextRow();
 
-    ImGui::TableSetColumnIndex(0);
-    ImGui::Text("Peers");
-    ImGui::TableSetColumnIndex(1);
-    ImGui::Text(fmt::format("{}", ctx.m_numPeers).c_str());
-    ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Peers");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(fmt::format("{}", ctx.m_numPeers).c_str());
+        ImGui::TableNextRow();
 
-    ImGui::TableSetColumnIndex(0);
-    ImGui::Text("Quantum");
-    ImGui::TableSetColumnIndex(1);
-    ImGui::Text(fmt::format("{}", ctx.m_lockFreeLinkData.quantum).c_str());
-    ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Quantum");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(fmt::format("{}", ctx.m_lockFreeLinkData.quantum).c_str());
+        ImGui::TableNextRow();
 
-    ImGui::TableSetColumnIndex(0);
-    ImGui::Text("Start/Stop/Sync");
-    ImGui::TableSetColumnIndex(1);
-    ImGui::Text(startStop);
-    ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Start/Stop/Sync");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(startStop);
+        ImGui::TableNextRow();
 
-    ImGui::TableSetColumnIndex(0);
-    ImGui::Text("Playing");
-    ImGui::TableSetColumnIndex(1);
-    ImGui::Text(isPlaying);
-    ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Playing");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(isPlaying);
+        ImGui::TableNextRow();
 
-    ImGui::TableSetColumnIndex(0);
-    ImGui::Text("Tempo");
-    ImGui::TableSetColumnIndex(1);
-    ImGui::Text(fmt::format("{}", int(ctx.m_tempo)).c_str());
-    ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Tempo");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(fmt::format("{}", int(ctx.m_tempo)).c_str());
+        ImGui::TableNextRow();
 
-    ImGui::TableSetColumnIndex(0);
-    ImGui::Text("Beats");
-    ImGui::TableSetColumnIndex(1);
-    ImGui::Text(fmt::format("{:.2f}", beats).c_str());
-    ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Beats");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(fmt::format("{:.2f}", beats).c_str());
+        ImGui::TableNextRow();
 
-    ImGui::TableSetColumnIndex(0);
-    ImGui::Text("Metro");
-    ImGui::TableSetColumnIndex(1);
-    ImGui::Text(str.str().c_str());
-    ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("Metro");
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text(str.str().c_str());
+        ImGui::TableNextRow();
 
-    ImGui::EndTable();
+        ImGui::EndTable();
+    }
 }
 
 void audio_show_settings_gui()

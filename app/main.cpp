@@ -14,8 +14,8 @@
 #pragma warning(default : 4005)
 #include <SDL.h>
 #include <SDL_vulkan.h>
-#include <stdio.h> // printf, fprintf
-#include <stdlib.h> // abort
+#include <cstdio> // printf, fprintf
+#include <cstdlib> // abort
 #include <vulkan/vulkan.h>
 
 #include "config_zing_app.h"
@@ -455,7 +455,7 @@ int main(int, char**)
     io.IniFilename = strSettings.c_str();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     // io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-    // io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;
+    //io.ConfigFlags |= ImGuiConfigFlags_DpiEnableScaleFonts;
     // io.ConfigFlags |= ImGuiConfigFlags_ViewportsNoTaskBarIcons;
     // io.ConfigFlags |= ImGuiConfigFlags_ViewportsNoMerge;
 
@@ -545,7 +545,7 @@ int main(int, char**)
     }
 
     // Our state
-    bool show_demo_window = false;
+    bool show_demo_window = true;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // Main loop
@@ -589,6 +589,7 @@ int main(int, char**)
         // Start the Dear ImGui frame
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
+
         ImGui::NewFrame();
 
         // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
