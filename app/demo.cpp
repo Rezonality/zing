@@ -13,6 +13,9 @@
 
 #include <config_zing_app.h>
 
+#define TSF_IMPLEMENTATION
+#include <tsf/tsf.h>
+
 using namespace Zing;
 using namespace std::chrono;
 namespace fs = std::filesystem;
@@ -24,15 +27,42 @@ sp_osc* osc = nullptr;
 sp_ftbl* ft = nullptr;
 sp_phaser *phs = nullptr;
 
+std::atomic<bool> g_noteOn = false;
+std::atomic<bool> g_noteOff = false;
 }
 
 void demo_init()
 {
     auto& ctx = GetAudioContext();
 
+    auto name = Zest::runtree_find_path("samples/sf2/eksf.sf2");
+    ctx.m_pSf2 = tsf_load_filename(name.string().c_str());
+
+    tsf_note_on(ctx.m_pSf2, 0, 48, 1.0f);
+    int pre = tsf_get_presetcount(ctx.m_pSf2);
+    for (int i = 0; i < pre; i++)
+    {
+        LOG(DBG, i << ":" << tsf_get_presetname(ctx.m_pSf2, i));
+    }
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
         auto& ctx = GetAudioContext();
 
+        if (g_noteOn)
+        {
+            tsf_note_on(ctx.m_pSf2, 0, 48, 0.5f);
+            tsf_note_on(ctx.m_pSf2, 24, 48, 1.0f);
+            tsf_note_on(ctx.m_pSf2, 0, 52, 0.5f);
+            tsf_note_on(ctx.m_pSf2, 24, 52, 1.0f);
+            g_noteOn = false;
+        }
+        if (g_noteOff)
+        {
+            tsf_note_off(ctx.m_pSf2, 0, 48);
+            tsf_note_off(ctx.m_pSf2, 24, 48);
+            tsf_note_off(ctx.m_pSf2, 0, 52);
+            tsf_note_off(ctx.m_pSf2, 24, 52);
+            g_noteOff = false;
+        }
         if (!osc)
         {
             sp_ftbl_create(ctx.pSP, &ft, 8192);
@@ -46,6 +76,8 @@ void demo_init()
             sp_phaser_init(ctx.pSP, phs);
         }
 
+        tsf_render_float(ctx.m_pSf2, (float*)pOutput, numSamples);
+        /*
         auto pOut = (float*)pOutput;
         for (uint32_t i = 0; i < numSamples; i++)
         {
@@ -61,6 +93,7 @@ void demo_init()
                 *pOut++ += out[ch];
             }
         }
+        */
     });
 }
 
@@ -118,7 +151,17 @@ void demo_draw()
 
     ImGui::SeparatorText("Test");
     ImGui::BeginDisabled(ctx.outputState.channelCount == 0 ? true : false);
-    ImGui::Checkbox("Tone", &playNote);
+    if (ImGui::Checkbox("Tone", &playNote))
+    {
+        if (playNote)
+        {
+            g_noteOn = true;
+        }
+        else
+        {
+            g_noteOff = true;
+        }
+    }
     ImGui::EndDisabled();
 
     ImGui::SeparatorText("Analysis");

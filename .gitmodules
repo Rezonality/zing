@@ -4,3 +4,6 @@
 [submodule "libs/zest"]
 	path = libs/zest
 	url = https://github.com/Rezonality/zest
+[submodule "libs/tsf"]
+	path = libs/tsf
+	url = https://github.com/schellingb/TinySoundFont.git

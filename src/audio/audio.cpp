@@ -9,6 +9,7 @@
 #include <zest/time/profiler.h>
 #include <zest/settings/settings.h>
 
+#include <tsf/tsf.h>
 
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
@@ -231,7 +232,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     static const uint64_t oneSecondNs = uint64_t(duration_cast<nanoseconds>(seconds(1)).count());
 
     // Set the max region for our audio profile candles to be the max time we think we have to collect the audio data
-    Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs));
+    Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs) * .01);
 
     if (!ctx.m_audioValid)
     {
@@ -545,6 +546,8 @@ void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t out
     sp_create(&ctx.pSP);
     ctx.pSP->nchan = ctx.outputState.channelCount;
     ctx.pSP->sr = ctx.outputState.sampleRate;
+    
+    tsf_set_output(ctx.m_pSf2, TSF_STEREO_INTERLEAVED, ctx.outputState.sampleRate, 0.0f);
 }
 
 void audio_destroy()

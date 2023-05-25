@@ -19,6 +19,7 @@ extern "C" {
 #include <soundpipe/h/soundpipe.h>
 }
 
+struct tsf;
 #ifdef WIN32
 #define LINK_PLATFORM_WINDOWS
 #elif defined __APPLE__
@@ -202,6 +203,7 @@ struct AudioContext
     int64_t m_lastClickBeat = 0;
     double m_tempo;
     int m_numPeers;
+    tsf* m_pSf2 = nullptr;
 };
 
 AudioContext& GetAudioContext();

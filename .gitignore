@@ -23,7 +23,7 @@ tags
 bld/
 [Bb]in/
 [Oo]bj/
-
+run_tree/samples/**/*
 imgui.ini
 git_stats
 # Visual Studio 2015 cache/options directory
@@ -146,7 +146,7 @@ publish/
 *.[Pp]ublish.xml
 *.azurePubxml
 
-# TODO: Un-comment the next line if you do not want to checkin 
+# TODO: Un-comment the next line if you do not want to checkin
 # your web deploy settings because they may include unencrypted
 # passwords
 #*.pubxml

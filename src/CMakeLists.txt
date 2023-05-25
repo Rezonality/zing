@@ -10,19 +10,30 @@ find_package(tomlplusplus CONFIG REQUIRED)
 find_package(date CONFIG REQUIRED)
 find_path(ABLETON_LINK_INCLUDE_DIRS "ableton/Link.hpp")
 
-set(ZING_SOURCE
+set(ZING_SF2_SOURCE
+    #${ZING_ROOT}/src/sf2/file.cpp
+)
 
-    ${ZING_ROOT}/project.natvis
-
-    ${ZING_ROOT}/src/wavetable/wavetable.cpp
-    ${ZING_ROOT}/src/wavetable/wavetable.h
-
-    # Audio
+set(ZING_AUDIO_SOURCE
     ${ZING_ROOT}/src/audio/audio.cpp
     ${ZING_ROOT}/src/audio/audio_analysis.cpp
+    
+    # Audio
     ${ZING_ROOT}/include/zing/audio/audio.h
     ${ZING_ROOT}/include/zing/audio/audio_analysis_settings.h
     ${ZING_ROOT}/include/zing/audio/audio_device_settings.h
+)
+
+set(ZING_WAVETABLE_SOURCE
+    ${ZING_ROOT}/src/wavetable/wavetable.cpp
+    ${ZING_ROOT}/src/wavetable/wavetable.h
+)
+
+set(ZING_SOURCE
+    ${ZING_SF2_SOURCE}
+    ${ZING_AUDIO_SOURCE}
+    ${ZING_WAVETABLE_SOURCE}
+    ${ZING_ROOT}/project.natvis
 )
 
 SET(ZEST_DIR ${ZING_ROOT}/libs/zing)
@@ -141,7 +152,9 @@ install(DIRECTORY ${ZING_ROOT}/include/zing
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
-source_group ("zing" FILES ${ZING_SOURCE})
+source_group ("zing/audio" FILES ${ZING_AUDIO_SOURCE})
+source_group ("zing/wavetable" FILES ${ZING_WAVETABLE_SOURCE})
+source_group ("zing/sf2" FILES ${ZING_SF2_SOURCE})
 source_group ("soundpipe" FILES ${SOUNDPIPE_SOURCE})
 source_group ("earlevel" FILES ${EARLEVEL_SOURCE})
 
