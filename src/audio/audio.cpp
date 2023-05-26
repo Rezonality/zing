@@ -133,7 +133,7 @@ void audio_play_metronome(const Link::SessionState sessionState, const double qu
             }
         }
 
-        if (ctx.m_clicking)
+        if (ctx.m_clicking && ctx.m_playMetronome)
         {
             // Simple cosine synth
             amplitude = float(cos(2 * glm::pi<double>() * ctx.m_clickTime * ctx.m_clickFrequency) * (1 - sin(5 * glm::pi<double>() * ctx.m_clickTime)));
@@ -224,7 +224,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     static const uint64_t oneSecondNs = uint64_t(duration_cast<nanoseconds>(seconds(1)).count());
 
     // Set the max region for our audio profile candles to be the max time we think we have to collect the audio data
-    Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs * .1));
+    Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs));
 
     if (!ctx.m_audioValid)
     {
@@ -252,20 +252,8 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
 
     audio_pre_callback(hostTime, outputBuffer, nBufferFrames);
 
-    if (ctx.m_isPlaying)
-    {
-        if (outputBuffer)
-        {
-            if (ctx.m_fnCallback)
-            {
-                ctx.m_fnCallback(bufferBeginAtOutput, outputBuffer, nBufferFrames);
-            }
-        }
-    }
-
-    if (inputBuffer)
-    {
-        for (uint32_t i = 0; i < ctx.inputState.channelCount; i++)
+    auto sendAnalysis = [&](auto& state, const float* pBuffer, uint32_t frames) {
+        for (uint32_t i = 0; i < state.channelCount; i++)
         {
             if (ctx.analysisChannels.size() > i)
             {
@@ -274,9 +262,9 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 pBundle->data.resize(nBufferFrames);
 
                 // Copy with stride
-                auto stride = ctx.inputState.channelCount;
-                auto pSource = ((const float*)inputBuffer) + i;
-                for (uint32_t count = 0; count < nBufferFrames; count++)
+                auto stride = state.channelCount;
+                auto pSource = pBuffer + i;
+                for (uint32_t count = 0; count < frames; count++)
                 {
                     pBundle->data[count] = *pSource;
                     pSource += stride;
@@ -286,7 +274,26 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 ctx.analysisChannels[i]->processBundles.enqueue(pBundle);
             }
         }
+    };
+
+    if (ctx.m_isPlaying)
+    {
+        if (outputBuffer)
+        {
+            if (ctx.m_fnCallback)
+            {
+                ctx.m_fnCallback(bufferBeginAtOutput, outputBuffer, nBufferFrames);
+            }
+            sendAnalysis(ctx.outputState, (const float*)outputBuffer, nBufferFrames);
+        }
     }
+
+    /*
+    if (inputBuffer)
+    {
+        sendAnalysis(ctx.inputState, (const float*)inputBuffer, nBufferFrames);
+    }
+    */
 
     ctx.inputState.totalFrames += nBufferFrames;
     ctx.outputState.totalFrames += nBufferFrames;

@@ -145,6 +145,7 @@ struct AudioContext
     bool m_audioValid = false;
     bool m_changedDeviceCombo = true;
 
+    std::atomic<bool> m_playMetronome = false;
     AudioCB m_fnCallback = nullptr;
 
     AudioChannelState inputState;

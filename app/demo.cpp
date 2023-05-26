@@ -26,7 +26,7 @@ void demo_init()
 {
     auto& ctx = GetAudioContext();
 
-    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/eksf.sf2"));
+    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
 
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
         auto& ctx = GetAudioContext();
@@ -159,6 +159,12 @@ void demo_draw()
         {
             g_noteOff = true;
         }
+    }
+  
+    bool metro = ctx.m_playMetronome;
+    if (ImGui::Checkbox("Metronome", &metro))
+    {
+        ctx.m_playMetronome = metro;
     }
     ImGui::EndDisabled();
 
