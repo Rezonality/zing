@@ -1,17 +1,9 @@
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <fmt/format.h>
-#include <glm/gtc/constants.hpp>
+#include <zing/pch.h>
 
-#include <zest/include/zest/ui/imgui_extras.h>
-#include <zest/math/imgui_glm.h>
-#include <zest/time/profiler.h>
 #include <zest/settings/settings.h>
 
-#include <tsf/tsf.h>
-
 #include <zing/audio/audio.h>
+#include <zing/audio/audio_samples.h>
 #include <zing/audio/audio_analysis.h>
 #include <zing/audio/audio_device_settings.h>
 #include <zing/audio/audio_analysis_settings.h>
@@ -232,7 +224,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     static const uint64_t oneSecondNs = uint64_t(duration_cast<nanoseconds>(seconds(1)).count());
 
     // Set the max region for our audio profile candles to be the max time we think we have to collect the audio data
-    Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs) * .01);
+    Profiler::SetRegionLimit(uint64_t(fracSec * oneSecondNs * .1));
 
     if (!ctx.m_audioValid)
     {
@@ -546,8 +538,8 @@ void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t out
     sp_create(&ctx.pSP);
     ctx.pSP->nchan = ctx.outputState.channelCount;
     ctx.pSP->sr = ctx.outputState.sampleRate;
-    
-    tsf_set_output(ctx.m_pSf2, TSF_STEREO_INTERLEAVED, ctx.outputState.sampleRate, 0.0f);
+
+    samples_update_rate(ctx.m_samples);
 }
 
 void audio_destroy()
@@ -628,6 +620,7 @@ bool audio_init(const AudioCB& fnCallback)
     });
 
     audio_analysis_destroy_all();
+    samples_stop(ctx.m_samples);
 
     // One duration initialization of the API and devices
     if (!ctx.m_initialized)

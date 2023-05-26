@@ -1,19 +1,10 @@
 #pragma once
 
-#include <chrono>
-#include <mutex>
-#include <portaudio.h>
-#include <complex>
-#include <atomic>
-#include <functional>
-
-#include <concurrentqueue/concurrentqueue.h>
-#include <zest/common.h>
-#include <zest/logger/logger.h>
-#include <zest/memory/memory.h>
+#include <zing/pch.h>
 
 #include <zing/audio/audio_analysis_settings.h>
 #include <zing/audio/audio_device_settings.h>
+#include <zing/audio/audio_samples.h>
 
 extern "C" {
 #include <soundpipe/h/soundpipe.h>
@@ -203,7 +194,8 @@ struct AudioContext
     int64_t m_lastClickBeat = 0;
     double m_tempo;
     int m_numPeers;
-    tsf* m_pSf2 = nullptr;
+
+    AudioSamples m_samples;
 };
 
 AudioContext& GetAudioContext();

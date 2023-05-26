@@ -15,11 +15,14 @@ set(ZING_SF2_SOURCE
 )
 
 set(ZING_AUDIO_SOURCE
+    ${ZING_ROOT}/src/pch.cpp
     ${ZING_ROOT}/src/audio/audio.cpp
     ${ZING_ROOT}/src/audio/audio_analysis.cpp
+    ${ZING_ROOT}/src/audio/audio_samples.cpp
     
     # Audio
     ${ZING_ROOT}/include/zing/audio/audio.h
+    ${ZING_ROOT}/include/zing/audio/audio_samples.h
     ${ZING_ROOT}/include/zing/audio/audio_analysis_settings.h
     ${ZING_ROOT}/include/zing/audio/audio_device_settings.h
 )
@@ -105,7 +108,7 @@ endif()
 
 target_precompile_headers(Zing
   PRIVATE
-    ${ZING_ROOT}/include/zing/audio/audio.h
+    ${ZING_ROOT}/include/zing/pch.h
 )
 set_source_files_properties (${SOUNDPIPE_SOURCE} PROPERTIES SKIP_PRECOMPILE_HEADERS 1)
 

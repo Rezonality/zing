@@ -1,10 +1,6 @@
 #pragma warning(disable : 4005)
-#include <zest/math/imgui_glm.h>
-#include <zest/time/profiler.h>
-#include <zest/logger/logger.h>
+#include "pch.h"
 #include <zest/settings/settings.h>
-#include <zest/file/runtree.h>
-#include <zest/file/file.h>
 
 #include <zing/audio/audio.h>
 
@@ -19,8 +15,6 @@
 #include <vulkan/vulkan.h>
 
 #include "config_zing_app.h"
-#include <filesystem>
-#include <fmt/format.h>
 
 #include "demo.h"
 

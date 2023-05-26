@@ -1,24 +1,15 @@
-#include <filesystem>
-#include <fmt/format.h>
-#include <memory>
+#include "pch.h"
 
-#include <zest/math/imgui_glm.h>
 #include <zest/settings/settings.h>
-#include <zest/time/profiler.h>
-#include <zest/time/timer.h>
-#include <zest/file/runtree.h>
-#include <zest/file/file.h>
 
 #include <zing/audio/audio.h>
 
 #include <config_zing_app.h>
 
-#define TSF_IMPLEMENTATION
 #include <tsf/tsf.h>
 
 using namespace Zing;
 using namespace std::chrono;
-namespace fs = std::filesystem;
 
 namespace {
 
@@ -35,34 +26,42 @@ void demo_init()
 {
     auto& ctx = GetAudioContext();
 
-    auto name = Zest::runtree_find_path("samples/sf2/eksf.sf2");
-    ctx.m_pSf2 = tsf_load_filename(name.string().c_str());
+    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/eksf.sf2"));
 
-    tsf_note_on(ctx.m_pSf2, 0, 48, 1.0f);
-    int pre = tsf_get_presetcount(ctx.m_pSf2);
-    for (int i = 0; i < pre; i++)
-    {
-        LOG(DBG, i << ":" << tsf_get_presetname(ctx.m_pSf2, i));
-    }
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
         auto& ctx = GetAudioContext();
 
         if (g_noteOn)
         {
-            tsf_note_on(ctx.m_pSf2, 0, 48, 0.5f);
-            tsf_note_on(ctx.m_pSf2, 24, 48, 1.0f);
-            tsf_note_on(ctx.m_pSf2, 0, 52, 0.5f);
-            tsf_note_on(ctx.m_pSf2, 24, 52, 1.0f);
+            for (auto& [id, container] : ctx.m_samples.samples)
+            {
+                auto tsf = container.soundFont;
+                if (tsf)
+                {
+                    tsf_note_on(tsf, 0, 48, 0.5f);
+                    tsf_note_on(tsf, 24, 48, 1.0f);
+                    tsf_note_on(tsf, 0, 52, 0.5f);
+                    tsf_note_on(tsf, 24, 52, 1.0f);
+                }
+            }
             g_noteOn = false;
         }
         if (g_noteOff)
         {
-            tsf_note_off(ctx.m_pSf2, 0, 48);
-            tsf_note_off(ctx.m_pSf2, 24, 48);
-            tsf_note_off(ctx.m_pSf2, 0, 52);
-            tsf_note_off(ctx.m_pSf2, 24, 52);
+            for (auto& [id, container] : ctx.m_samples.samples)
+            {
+                auto tsf = container.soundFont;
+                if (tsf)
+                {
+                    tsf_note_off(tsf, 0, 48);
+                    tsf_note_off(tsf, 24, 48);
+                    tsf_note_off(tsf, 0, 52);
+                    tsf_note_off(tsf, 24, 52);
+                }
+            }
             g_noteOff = false;
         }
+
         if (!osc)
         {
             sp_ftbl_create(ctx.pSP, &ft, 8192);
@@ -76,8 +75,6 @@ void demo_init()
             sp_phaser_init(ctx.pSP, phs);
         }
 
-        tsf_render_float(ctx.m_pSf2, (float*)pOutput, numSamples);
-        /*
         auto pOut = (float*)pOutput;
         for (uint32_t i = 0; i < numSamples; i++)
         {
@@ -93,7 +90,8 @@ void demo_init()
                 *pOut++ += out[ch];
             }
         }
-        */
+
+        samples_render(ctx.m_samples, (float*)pOutput, int(numSamples));
     });
 }
 

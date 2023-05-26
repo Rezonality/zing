@@ -41,6 +41,10 @@ target_link_libraries (${APP_NAME}
     ${PLATFORM_LINKLIBS}
     )
 
+target_precompile_headers(${APP_NAME}
+  PRIVATE
+    ${APP_ROOT}/pch.h
+)
 target_compile_definitions(${APP_NAME}
     PUBLIC
     NO_LIBSNDFILE
