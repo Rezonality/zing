@@ -3,6 +3,7 @@
 #include <zest/settings/settings.h>
 
 #include <zing/audio/audio.h>
+#include <zing/audio/midi.h>
 
 #include <config_zing_app.h>
 
@@ -28,6 +29,7 @@ void demo_init()
 
     samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
 
+    midi_probe();
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
         auto& ctx = GetAudioContext();
 
@@ -62,6 +64,7 @@ void demo_init()
             g_noteOff = false;
         }
 
+        /*
         if (!osc)
         {
             sp_ftbl_create(ctx.pSP, &ft, 8192);
@@ -79,6 +82,7 @@ void demo_init()
         for (uint32_t i = 0; i < numSamples; i++)
         {
             float out[2] = { 0.0f, 0.0f };
+
             if (playNote)
             {
                 sp_osc_compute(ctx.pSP, osc, &out[0], &out[0]);
@@ -90,6 +94,7 @@ void demo_init()
                 *pOut++ += out[ch];
             }
         }
+        */
 
         samples_render(ctx.m_samples, (float*)pOutput, int(numSamples));
     });

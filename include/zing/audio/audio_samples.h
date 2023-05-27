@@ -13,7 +13,6 @@ struct SampleContainer
     {
         tsf* soundFont;
     };
-        
 };
 
 struct AudioSamples

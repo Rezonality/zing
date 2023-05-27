@@ -7,6 +7,10 @@
 #include <zing/audio/audio_analysis.h>
 #include <zing/audio/audio_device_settings.h>
 #include <zing/audio/audio_analysis_settings.h>
+#include <zing/audio/midi.h>
+
+//#define LIBREMIDI_HEADER_ONLY
+//#include <libremidi/libremidi.hpp>
 
 using namespace std::chrono;
 using namespace ableton;
@@ -600,7 +604,7 @@ void audio_add_settings_hooks()
         audio->insert("analysis", audioanalysis_save_settings(ctx.audioAnalysisSettings));
         audio->insert("device", audiodevice_save_settings(ctx.audioDeviceSettings));
     };
-    
+
     auto& settings = Zest::GlobalSettingsManager::Instance();
     settings.AddClient(client);
 }
