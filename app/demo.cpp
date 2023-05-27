@@ -30,6 +30,8 @@ void demo_init()
     samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
 
     midi_probe();
+    midi_load(Zest::runtree_find_path("samples/midi/demo-1.mid"));
+
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
         auto& ctx = GetAudioContext();
 
