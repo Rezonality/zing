@@ -3,10 +3,10 @@
 #include <zest/settings/settings.h>
 
 #include <zing/audio/audio.h>
-#include <zing/audio/audio_samples.h>
 #include <zing/audio/audio_analysis.h>
-#include <zing/audio/audio_device_settings.h>
 #include <zing/audio/audio_analysis_settings.h>
+#include <zing/audio/audio_device_settings.h>
+#include <zing/audio/audio_samples.h>
 #include <zing/audio/midi.h>
 
 //#define LIBREMIDI_HEADER_ONLY
@@ -264,6 +264,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 // Copy the audio data into a processing bundle and add it to the queue
                 auto pBundle = audio_get_bundle();
                 pBundle->data.resize(nBufferFrames);
+                pBundle->channel = i;
 
                 // Copy with stride
                 auto stride = state.channelCount;
@@ -1065,7 +1066,6 @@ void audio_show_settings_gui()
         audioResetRequired = true;
     }
 
-
     // Ensure sensible
     audio_analysis_validate_settings(analysisSettings);
 
@@ -1077,6 +1077,34 @@ void audio_show_settings_gui()
     if (!ctx.m_audioValid)
     {
         ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Invalid Audio Configuration!");
+    }
+}
+
+std::string audio_to_channel_name(uint32_t channel)
+{
+    if (channel == 0)
+    {
+        return "L";
+    }
+    else if (channel == 1)
+    {
+        return "R";
+    }
+    else
+    {
+        return fmt::format("Ch:{}", channel);
+    }
+}
+
+void audio_add_midi_event(const tml_message& msg)
+{
+    auto& ctx = audioContext;
+
+    ctx.midi.enqueue(msg);
+
+    for (auto& fnMidi : ctx.midiClients)
+    {
+        fnMidi(msg);
     }
 }
 

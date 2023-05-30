@@ -44,12 +44,13 @@ void audio_analysis_create_all()
     auto& ctx = Zing::GetAudioContext();
 
     // Initialize the analysis
-    for (uint32_t channel = 0; channel < ctx.inputState.channelCount; channel++)
+    for (uint32_t channel = 0; channel < ctx.outputState.channelCount; channel++)
     {
         if (ctx.analysisChannels.size() <= channel)
         {
             ctx.analysisChannels.push_back(std::make_shared<AudioAnalysis>());
-            audio_analysis_start(*ctx.analysisChannels[channel], ctx.inputState);
+            ctx.analysisChannels[channel]->thisChannel = channel;
+            audio_analysis_start(*ctx.analysisChannels[channel], ctx.outputState);
         }
     }
 }
@@ -77,11 +78,15 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
 
     // Kick off the thread
     auto pAnalysis = &analysis;
+
+    // 2 spare cache buffers
+    pAnalysis->analysisDataCache.enqueue(std::make_shared<AudioAnalysisData>());
+    pAnalysis->analysisDataCache.enqueue(std::make_shared<AudioAnalysisData>());
+
     analysis.channel = state;
     analysis.exited = false;
     analysis.quitThread = false;
     analysis.analysisThread = std::move(std::thread([=]() {
-
         const auto wakeUpDelta = std::chrono::milliseconds(10);
         for (;;)
         {
@@ -94,8 +99,10 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
             std::shared_ptr<AudioBundle> spData;
             if (!pAnalysis->processBundles.try_dequeue(spData))
             {
+#ifdef DEBUG
+                Zest::Profiler::NameThread(fmt::format("Analysis: {}", pAnalysis->thisChannel == 0 ? "L" : "R").c_str());
+#endif
                 // Sleep
-                PROFILE_NAME_THREAD(Analysis);
                 std::this_thread::sleep_for(wakeUpDelta);
                 continue;
             }
@@ -132,15 +139,12 @@ bool audio_analysis_init(AudioAnalysis& analysis, AudioAnalysisData& analysisDat
     }
 
     // Imaginary part of audio input always 0.
-    analysis.fftIn.resize(ctx.audioAnalysisSettings.frames, std::complex<float>{ 0.0, 0.0 });
+    analysis.fftIn.resize(ctx.audioAnalysisSettings.frames, std::complex<float>{0.0, 0.0});
     analysis.fftOut.resize(ctx.audioAnalysisSettings.frames);
     analysis.fftMag.resize(ctx.audioAnalysisSettings.frames);
 
-    for (uint32_t buf = 0; buf < AnalysisSwapBuffers; buf++)
-    {
-        analysisData.spectrum[buf].resize(analysis.outputSamples, (0));
-        analysisData.audio[buf].resize(ctx.audioAnalysisSettings.frames, 0.0f);
-    }
+    analysisData.spectrum.resize(analysis.outputSamples, (0));
+    analysisData.audio.resize(ctx.audioAnalysisSettings.frames, 0.0f);
 
     analysis.cfg = kiss_fft_alloc(ctx.audioAnalysisSettings.frames, 0, 0, 0);
 
@@ -159,17 +163,20 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
     // frequencies if the samples didn't perfectly tile (as they won't).
     // he windowing function smooths the outer edges to remove this transition and give more accurate results.
 
-    ProducerMemLock memLock(analysis.analysisData);
-    auto& analysisData = memLock.Data();
-
-    if (analysisData.audio->empty())
+    std::shared_ptr<AudioAnalysisData> spAnalysisData;
+    if (!analysis.analysisDataCache.try_dequeue(spAnalysisData))
+    {
+        return;
+    }
+    
+    auto& analysisData = *spAnalysisData;
+    if (analysisData.audio.empty())
     {
         // Setup analysis
         audio_analysis_init(analysis, analysisData);
     }
 
-    analysisData.currentBuffer = 1 - analysisData.currentBuffer;
-    auto& audioBuffer = analysisData.audio[analysisData.currentBuffer];
+    auto& audioBuffer = analysisData.audio;
 
 #ifdef _DEBUG
     for (auto& val : bundle.data)
@@ -203,14 +210,20 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
 
     // Some of this math found here:
     //   https://github.com/beautypi/shadertoy-iOS-v2/blob/master/shadertoy/SoundStreamHelper.m
-    if (analysis.audioActive)
     {
         {
             PROFILE_SCOPE(FFT);
             for (uint32_t i = 0; i < ctx.audioAnalysisSettings.frames; i++)
             {
                 // Hamming window, FF
-                analysis.fftIn[i] = std::complex(audioBuffer[i] * analysis.window[i], 0.0f);
+                if (analysis.audioActive)
+                {
+                    analysis.fftIn[i] = std::complex(audioBuffer[i] * analysis.window[i], 0.0f);
+                }
+                else
+                {
+                    analysis.fftIn[i] = std::complex(0.0f, 0.0f);
+                }
                 // assert(std::isfinite(analysis.fftIn[i].real()));
             }
 
@@ -239,7 +252,10 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
 
         audio_analysis_calculate_spectrum(analysis, analysisData);
     }
-   
+
+    // Send it
+    analysis.analysisData.enqueue(spAnalysisData);
+
     ctx.analysisWriteGeneration++;
 }
 
@@ -256,7 +272,7 @@ void audio_analysis_calculate_audio(AudioAnalysis& analysis, AudioAnalysisData& 
     // his is because the FF behaves as if your sample repeats forever, and would therefore generate extra
     // frequencies if the samples didn't perfectly tile (as they won't).
     // he windowing function smooths the outer edges to remove this transition and give more accurate results.
-    auto& audioBuf = analysisData.audio[analysisData.currentBuffer];
+    auto& audioBuf = analysisData.audio;
     auto& audioBufOld = analysisData.audio[1 - analysisData.currentBuffer];
 
     analysis.audioActive = false;
@@ -298,10 +314,10 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
     float maxSpectrumValue = std::numeric_limits<float>::min();
     uint32_t maxSpectrumBucket = 0;
 
-    auto& spectrum = analysisData.spectrum[analysisData.currentBuffer];
-    auto& spectrumBucketsOld = analysisData.spectrumBuckets[1 - analysisData.currentBuffer];
-    auto& spectrumBuckets = analysisData.spectrumBuckets[analysisData.currentBuffer];
+    auto& spectrum = analysisData.spectrum;
+    auto& spectrumBuckets = analysisData.spectrumBuckets;
 
+    LOG(DBG, "Analysis Writing: " << (analysis.thisChannel == 0 ? "L" : "R") << ": " << audio_analysis_write_index(analysisData));
     for (uint32_t i = 0; i < analysis.outputSamples; i++)
     {
         // Magnitude
@@ -343,7 +359,7 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
         const int width = 2;
         for (int i = width; i < (int)analysis.outputSamples - width; ++i)
         {
-            auto& spectrum = analysisData.spectrum[analysisData.currentBuffer];
+            auto& spectrum = analysisData.spectrum;
 
             float total = (0);
             const float weight_sum = width * (2.0) + (0.5);
@@ -366,7 +382,7 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
 
         if (analysis.logPartitions != ctx.audioAnalysisSettings.logPartitions)
         {
-            analysis.lastSpectrumPartitions = { 0, 0 };
+            analysis.lastSpectrumPartitions = {0, 0};
         }
 
         // Linear space shows lower frequencies, log space shows all freqencies but focused
@@ -416,20 +432,26 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
         }
     }
 
-    if (ctx.audioAnalysisSettings.blendFFT && spectrumBuckets.size() == spectrumBucketsOld.size())
+    if (ctx.audioAnalysisSettings.blendFFT)
     {
-        // Time in seconds
-        auto deltaTimeFrame = analysis.channel.deltaTime * analysis.channel.frames;
-
-        // Blend factor is blend time / time in seconds
-        auto blendFactor = 1.0f - (ctx.audioAnalysisSettings.blendFactor / 1000.0f);
-        blendFactor = std::clamp(blendFactor, 0.01f, 1.0f);
-
-        for (size_t i = 0; i < spectrumBuckets.size(); i++)
+        /*
+        auto& spectrumBucketsOld = analysisData.spectrumBuckets[1 - analysisData.currentBuffer];
+        if (spectrumBuckets.size() == spectrumBucketsOld.size())
         {
-            // Blend with previous result
-            spectrumBuckets[i] = spectrumBuckets[i] * blendFactor + spectrumBucketsOld[i] * (1.0f - blendFactor);
+            // Time in seconds
+            auto deltaTimeFrame = analysis.channel.deltaTime * analysis.channel.frames;
+
+            // Blend factor is blend time / time in seconds
+            auto blendFactor = 1.0f - (ctx.audioAnalysisSettings.blendFactor / 1000.0f);
+            blendFactor = std::clamp(blendFactor, 0.01f, 1.0f);
+
+            for (size_t i = 0; i < spectrumBuckets.size(); i++)
+            {
+                // Blend with previous result
+                spectrumBuckets[i] = spectrumBuckets[i] * blendFactor + spectrumBucketsOld[i] * (1.0f - blendFactor);
+            }
         }
+        */
     }
 
     audio_analysis_calculate_spectrum_bands(analysis, analysisData);
@@ -447,16 +469,16 @@ void audio_analysis_calculate_spectrum_bands(AudioAnalysis& analysis, AudioAnaly
     auto bands = glm::vec4(0.0f);
 
     // Calculate frequency per FFT sample
-    auto frequencyPerBucket = float(analysis.channel.sampleRate) / float(analysisData.spectrumBuckets[analysisData.currentBuffer].size());
+    auto frequencyPerBucket = float(analysis.channel.sampleRate) / float(analysisData.spectrumBuckets.size());
     auto spectrumOffsets = Div(ctx.audioAnalysisSettings.spectrumFrequencies, (int)frequencyPerBucket) + glm::uvec4(1, 1, 1, 0);
 
-    for (uint32_t sample = 0; sample < analysisData.spectrumBuckets[analysisData.currentBuffer].size(); sample++)
+    for (uint32_t sample = 0; sample < analysisData.spectrumBuckets.size(); sample++)
     {
         for (uint32_t index = 0; index < 4; index++)
         {
             if (sample < uint32_t(spectrumOffsets[index]))
             {
-                bands[index] += analysisData.spectrumBuckets[analysisData.currentBuffer][index];
+                bands[index] += analysisData.spectrumBuckets[index];
                 break;
             }
         }
@@ -504,7 +526,7 @@ void audio_analysis_gen_log_space(AudioAnalysis& analysis, uint32_t limit, uint3
     uint32_t lastValue = 0;
     for (float fVal = 0.0f; fVal <= 1.0f; fVal += 1.0f / float(n))
     {
-        auto step = uint32_t(limit * std::pow(fVal, ctx.audioAnalysisSettings.spectrumSharpness));
+        auto step = uint32_t(limit * std::pow(fVal,  ctx.audioAnalysisSettings.spectrumSharpness));
         step = std::max(step, lastValue + 1);
         lastValue = step;
         analysis.spectrumPartitions.push_back(float(step));
@@ -515,7 +537,7 @@ void audio_analysis_gen_log_space(AudioAnalysis& analysis, uint32_t limit, uint3
 void audio_analysis_gen_linear_space(AudioAnalysis& analysis, uint32_t limit, uint32_t n)
 {
     auto& ctx = GetAudioContext();
-    
+
     SpectrumPartitionSettings settings;
     settings.limit = limit;
     settings.n = n;
@@ -534,6 +556,16 @@ void audio_analysis_gen_linear_space(AudioAnalysis& analysis, uint32_t limit, ui
     {
         analysis.spectrumPartitions[i] = float(limit) * (float(i) / (float(n)));
     }
+}
+
+uint32_t audio_analysis_read_index(AudioAnalysisData& data)
+{
+    return (1 - data.currentBuffer);
+}
+
+uint32_t audio_analysis_write_index(AudioAnalysisData& data)
+{
+    return data.currentBuffer;
 }
 
 } // namespace Zing

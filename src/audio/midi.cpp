@@ -1,4 +1,5 @@
 #include <zing/pch.h>
+#include <zest/file/file.h>
 
 #include <libremidi/libremidi.hpp>
 #include <libremidi/reader.hpp>
@@ -9,21 +10,13 @@ namespace Zing
 
 bool midi_load(const fs::path& path)
 {
-    // Read raw from a MIDI file
-    std::ifstream file{path, std::ios::binary};
-    if (!file.is_open())
-    {
-        return false;
-    }
-
-    std::vector<uint8_t> bytes;
-    bytes.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    auto bytes = Zest::file_read(path);
 
     // Initialize our reader object
     libremidi::reader r{true};
 
     // Parse
-    libremidi::reader::parse_result result = r.parse(bytes);
+    libremidi::reader::parse_result result = r.parse((uint8_t*)bytes.c_str(), bytes.size());
 
     switch (result)
     {

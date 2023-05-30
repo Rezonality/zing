@@ -1,8 +1,12 @@
 #include "pch.h"
 
+#include <deque>
+
 #include <zest/settings/settings.h>
+#include <zest/ui/colors.h>
 
 #include <zing/audio/audio.h>
+#include <zing/audio/audio_analysis.h>
 #include <zing/audio/midi.h>
 
 #include <config_zing_app.h>
@@ -12,6 +16,9 @@ using namespace std::chrono;
 
 namespace
 {
+
+std::deque<tml_message> showMidi;
+static double g_Msec = 0.0; //current playback time
 
 } //namespace
 
@@ -24,11 +31,15 @@ void demo_init()
     auto tsf = ctx.m_samples.samples["GM"].soundFont;
 
     tml_message* pMidi = tml_load_filename(Zest::runtree_find_path("samples/sf2/demo-1.mid").string().c_str());
-    
-    // Queue the midi 
+
+    ctx.midiClients.push_back([](const tml_message& msg) {
+        showMidi.push_back(msg);
+    });
+
+    // Queue the midi
     while (pMidi)
     {
-        ctx.midi.enqueue(*pMidi);
+        audio_add_midi_event(*pMidi);
         pMidi = pMidi->next;
     }
 
@@ -39,11 +50,10 @@ void demo_init()
         {
             return;
         }
-        static double g_Msec = 0.0; //current playback time
         static tml_message msg;
         static bool pendingMessage = false;
         static const uint64_t blockSize = 64;
-        
+
         uint64_t currentBlockSize = 0;
         assert(numSamples % blockSize == 0);
 
@@ -104,6 +114,96 @@ void demo_init()
     });
 }
 
+void demo_draw_midi()
+{
+    if (ImGui::Begin("Midi"))
+    {
+        // Store the currently active notes
+        std::unordered_map<int, float> activeNotes; // Map note key to start time
+
+        float startTime = float(g_Msec) - 1000.0f;
+        float endTime = float(g_Msec) + 2000.0f;
+
+        while (!showMidi.empty())
+        {
+            if (showMidi.front().time >= startTime)
+                break;
+
+            showMidi.pop_front();
+        }
+
+        float timeRange = endTime - startTime;
+
+        auto regionSize = ImGui::GetContentRegionAvail();
+        glm::vec2 regionMin(ImGui::GetCursorScreenPos());
+        glm::vec2 regionMax(regionMin.x + regionSize.x, regionMin.y + regionSize.y);
+
+        float xPos = regionMin.x;
+        float yPos = regionMin.y;
+
+        xPos += (1000.0f / timeRange) * regionSize.x;
+        ImGui::GetWindowDrawList()->AddLine(
+            ImVec2(xPos, yPos),
+            ImVec2(xPos + 1, yPos + regionSize.y),
+            0xFFFFFFFF);
+
+        // Iterate over the MIDI events and display them within the time range
+        for (auto itr = showMidi.begin(); itr != showMidi.end(); itr++)
+        {
+            auto& msg = *itr;
+
+            // Calculate the position of the event within the window
+            float xPos = regionMin.x + (msg.time - startTime) / timeRange * regionSize.x;
+            float yPos = regionMax.y - msg.key * 10.0f;
+
+            // Set the color based on the event type
+            ImU32 color = IM_COL32(255, 255, 255, 255); // Default color is white
+            if (msg.type == TML_NOTE_ON)
+            {
+                color = IM_COL32(255, 0, 0, 255); // Note on events are red
+
+                // Add the note to the active notes list
+                activeNotes[msg.key] = float(msg.time);
+                    
+                if (msg.time > endTime)
+                {
+                    break;
+                }
+            }
+            else if (msg.type == TML_NOTE_OFF)
+            {
+                color = glm::packUnorm4x8(Zest::colors_get_default(msg.key));
+
+                // Check if there is a corresponding note on event
+                auto it = activeNotes.find(msg.key);
+                if (it != activeNotes.end())
+                {
+                    float noteOnTime = it->second;
+                    activeNotes.erase(it);
+
+                    // Calculate the width of the bar between TML_NOTE_ON and TML_NOTE_OFF events
+                    float barWidth = (msg.time - noteOnTime) / timeRange * regionSize.x;
+
+                    // Draw a colored bar between TML_NOTE_ON and TML_NOTE_OFF events
+                    ImGui::GetWindowDrawList()->AddRectFilled(
+                        ImVec2(xPos - barWidth, yPos),
+                        ImVec2(xPos, yPos + 8.0f * (msg.velocity / 127.0f)),
+                        color);
+
+                }
+            }
+            // Add more color assignments for other event types if needed
+
+            // Draw a vertical line at the position of the event
+            ImGui::GetWindowDrawList()->AddLine(
+                ImVec2(xPos, yPos),
+                ImVec2(xPos, yPos + 8.0f),
+                color);
+        }
+    }
+    ImGui::End();
+}
+
 void demo_draw_analysis()
 {
     auto& audioContext = GetAudioContext();
@@ -113,22 +213,26 @@ void demo_draw_analysis()
     const auto BufferTypes = 2; // Spectrum + Audio
     const auto BufferHeight = Channels * BufferTypes;
 
+    static AudioAnalysisData currentData;
     for (int channel = 0; channel < Channels; channel++)
     {
         auto& analysis = audioContext.analysisChannels[channel];
 
-        ConsumerMemLock memLock(analysis->analysisData);
-        auto& processData = memLock.Data();
-        auto currentBuffer = 1 - processData.currentBuffer;
+        std::shared_ptr<AudioAnalysisData> spNewData;
+        while (analysis->analysisData.try_dequeue(spNewData))
+        {
+            currentData = *spNewData;
+            analysis->analysisDataCache.enqueue(spNewData);
+        }
 
-        auto& spectrumBuckets = processData.spectrumBuckets[currentBuffer];
-        auto& audio = processData.audio[currentBuffer];
+        auto& spectrumBuckets = currentData.spectrumBuckets;
+        auto& audio = currentData.audio;
 
         if (!spectrumBuckets.empty())
         {
             ImVec2 plotSize(300, 100);
-            ImGui::PlotLines(fmt::format("Spectrum: {}", channel).c_str(), &spectrumBuckets[0], static_cast<int>(spectrumBuckets.size()), 0, NULL, 0.0f, 1.0f, plotSize);
-            ImGui::PlotLines(fmt::format("Audio: {}", channel).c_str(), &audio[0], static_cast<int>(audio.size()), 0, NULL, -1.0f, 1.0f, plotSize);
+            ImGui::PlotLines(fmt::format("Spectrum: {}", audio_to_channel_name(channel)).c_str(), &spectrumBuckets[0], static_cast<int>(spectrumBuckets.size() / 2.5), 0, NULL, 0.0f, 1.0f, plotSize);
+            ImGui::PlotLines(fmt::format("Audio: {}", audio_to_channel_name(channel)).c_str(), &audio[0], static_cast<int>(audio.size()), 0, NULL, -1.0f, 1.0f, plotSize);
         }
     }
 }
@@ -182,6 +286,8 @@ void demo_draw()
     demo_draw_analysis();
 
     ImGui::End();
+
+    demo_draw_midi();
 }
 
 void demo_cleanup()
@@ -192,7 +298,7 @@ void demo_cleanup()
 
 // Old/Kept
 /*
-    
+
     //midi_probe();
     //midi_load(Zest::runtree_find_path("samples/midi/demo-1.mid"));
 
@@ -235,34 +341,34 @@ std::atomic<bool> g_noteOff = false;
             }
             */
 
-            /*
-            if (!osc)
-            {
-                sp_ftbl_create(ctx.pSP, &ft, 8192);
-                sp_osc_create(&osc);
+/*
+if (!osc)
+{
+    sp_ftbl_create(ctx.pSP, &ft, 8192);
+    sp_osc_create(&osc);
 
-                sp_gen_triangle(ctx.pSP, ft);
-                sp_osc_init(ctx.pSP, osc, ft, 0);
-                osc->freq = 500;
+    sp_gen_triangle(ctx.pSP, ft);
+    sp_osc_init(ctx.pSP, osc, ft, 0);
+    osc->freq = 500;
 
-                sp_phaser_create(&phs);
-                sp_phaser_init(ctx.pSP, phs);
-            }
+    sp_phaser_create(&phs);
+    sp_phaser_init(ctx.pSP, phs);
+}
 
-            auto pOut = (float*)pOutput;
-            for (uint32_t i = 0; i < numSamples; i++)
-            {
-                float out[2] = { 0.0f, 0.0f };
+auto pOut = (float*)pOutput;
+for (uint32_t i = 0; i < numSamples; i++)
+{
+    float out[2] = { 0.0f, 0.0f };
 
-                if (playNote)
-                {
-                    sp_osc_compute(ctx.pSP, osc, &out[0], &out[0]);
-                    sp_phaser_compute(ctx.pSP, phs, &out[0], &out[0], &out[0], &out[1]);
-                }
+    if (playNote)
+    {
+        sp_osc_compute(ctx.pSP, osc, &out[0], &out[0]);
+        sp_phaser_compute(ctx.pSP, phs, &out[0], &out[0], &out[0], &out[1]);
+    }
 
-                for (uint32_t ch = 0; ch < ctx.outputState.channelCount; ch++)
-                {
-                    *pOut++ += out[ch];
-                }
-            }
-            */
+    for (uint32_t ch = 0; ch < ctx.outputState.channelCount; ch++)
+    {
+        *pOut++ += out[ch];
+    }
+}
+*/

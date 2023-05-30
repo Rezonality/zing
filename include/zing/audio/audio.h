@@ -31,6 +31,7 @@ namespace Zing
 
 struct AudioBundle
 {
+    uint32_t channel;
     std::vector<float> data;
 };
 
@@ -69,13 +70,12 @@ struct AudioChannelState
     double deltaTime = 1.0f / (double)sampleRate;
 };
 
-static const uint32_t AnalysisSwapBuffers = 2;
 struct AudioAnalysisData
 {
     // Double buffer the data
-    std::vector<float> spectrumBuckets[AnalysisSwapBuffers];
-    std::vector<float> spectrum[AnalysisSwapBuffers];
-    std::vector<float> audio[AnalysisSwapBuffers];
+    std::vector<float> spectrumBuckets;
+    std::vector<float> spectrum;
+    std::vector<float> audio;
     uint32_t currentBuffer = 0;
     std::vector<float> frameCache;
 };
@@ -102,6 +102,7 @@ struct AudioAnalysis
     std::vector<float> window;
 
     AudioChannelState channel;
+    uint32_t thisChannel;
 
     uint32_t outputSamples = 0; // The FFT output frames
 
@@ -122,10 +123,12 @@ struct AudioAnalysis
     SpectrumPartitionSettings lastSpectrumPartitions;
     bool logPartitions = true;
 
-    PNL_CL_Memory<AudioAnalysisData, std::mutex> analysisData;
-    
     // Bundles pending processing
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioBundle>> processBundles;
+
+
+    moodycamel::ConcurrentQueue<std::shared_ptr<AudioAnalysisData>> analysisData;
+    moodycamel::ConcurrentQueue<std::shared_ptr<AudioAnalysisData>> analysisDataCache;
 };
 
 struct LinkData
@@ -136,6 +139,8 @@ struct LinkData
     double quantum = 4.0;
     bool startStopSyncOn = true;
 };
+
+using fnMidiBroadcast = std::function<void(const tml_message&)>;
 
 struct AudioContext
 {
@@ -200,6 +205,7 @@ struct AudioContext
     // Midi
     moodycamel::ConcurrentQueue<tml_message> midi;
 
+    std::vector<fnMidiBroadcast> midiClients;
 };
 
 AudioContext& GetAudioContext();
@@ -217,6 +223,9 @@ void audio_show_settings_gui();
 
 std::shared_ptr<AudioBundle> audio_get_bundle();
 void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle);
+
+std::string audio_to_channel_name(uint32_t channel);
+void audio_add_midi_event(const tml_message& msg);
 
 #define CHECK_NOT_AUDIO_THREAD assert(std::this_thread::get_id() != ctx.threadId);
 
