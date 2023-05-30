@@ -126,7 +126,6 @@ struct AudioAnalysis
     
     // Bundles pending processing
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioBundle>> processBundles;
-
 };
 
 struct LinkData
@@ -197,6 +196,10 @@ struct AudioContext
     int m_numPeers;
 
     AudioSamples m_samples;
+
+    // Midi
+    moodycamel::ConcurrentQueue<tml_message> midi;
+
 };
 
 AudioContext& GetAudioContext();
