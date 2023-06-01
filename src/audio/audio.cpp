@@ -711,12 +711,16 @@ bool audio_init(const AudioCB& fnCallback)
         return true;
     }
 
+    ctx.m_audioValid = true;
+
     ret = Pa_StartStream(ctx.m_pStream);
     if (ret != paNoError)
     {
         Pa_CloseStream(ctx.m_pStream);
         ctx.m_pStream = nullptr;
         LOG(ERR, Pa_GetErrorText(ret));
+
+        ctx.m_audioValid = false;
         return true;
     }
 
@@ -726,8 +730,6 @@ bool audio_init(const AudioCB& fnCallback)
     audio_set_channels_rate(ctx.m_outputParams.channelCount, ctx.m_inputParams.channelCount, ctx.audioDeviceSettings.sampleRate, ctx.audioDeviceSettings.sampleRate);
 
     audio_analysis_create_all();
-
-    ctx.m_audioValid = true;
 
     audio_start_playing();
 

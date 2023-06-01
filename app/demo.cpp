@@ -114,24 +114,91 @@ void demo_init()
     });
 }
 
+struct NoteKey
+{
+    int channel;
+    int key;
+};
+
+bool operator==(const NoteKey& lhs, const NoteKey& rhs)
+{
+    return (lhs.channel == rhs.channel) && (lhs.key == rhs.key);
+}
+
+template <>
+struct std::hash<NoteKey>
+{
+    std::size_t operator()(NoteKey const& s) const noexcept
+    {
+        return std::hash<size_t>{}(s.channel) ^ std::hash<size_t>{}(s.key << 8); // or use boost::hash_combine
+    }
+};
+
 void demo_draw_midi()
 {
+    float startTime = float(g_Msec) - 1000.0f;
+    float endTime = float(g_Msec) + 2000.0f;
+
+    static std::unordered_map<NoteKey, std::pair<float, float>> activeNotes; // Map note key to start time
+    while (!showMidi.empty())
+    {
+        const auto& msg = showMidi.front();
+
+        NoteKey key = NoteKey{msg.channel, msg.key};
+
+        float time = float(msg.time);
+
+        auto itrFound = activeNotes.find(key);
+        if (msg.type == TML_NOTE_ON)
+        {
+            // This note starts after the end of the frame, ignore for now
+            // We'll come back later
+            if (msg.time >= endTime)
+            {
+                break;
+            }
+
+            // Otherwise, record the note
+            if (itrFound != activeNotes.end())
+            {
+                assert(!"WTF");
+            }
+            else
+            {
+                activeNotes[key] = {time, std::numeric_limits<float>::max()};
+            }
+        }
+        else if (msg.type == TML_NOTE_OFF)
+        {
+            // Update the time
+            auto itrFound = activeNotes.find(key);
+            if (itrFound != activeNotes.end())
+            {
+                // Update the time range of this note
+                itrFound->second = {itrFound->second.first, time};
+            }
+        }
+        showMidi.pop_front();
+    }
+
+    auto itr = activeNotes.begin();
+    while (itr != activeNotes.end())
+    {
+        auto& timeRange = itr->second;
+
+        // Kill notes that are before the timeline
+        if (timeRange.second < startTime)
+        {
+            itr = activeNotes.erase(itr);
+        }
+        else
+        {
+            itr++;
+        }
+    };
+
     if (ImGui::Begin("Midi"))
     {
-        // Store the currently active notes
-        std::unordered_map<int, float> activeNotes; // Map note key to start time
-
-        float startTime = float(g_Msec) - 1000.0f;
-        float endTime = float(g_Msec) + 2000.0f;
-
-        while (!showMidi.empty())
-        {
-            if (showMidi.front().time >= startTime)
-                break;
-
-            showMidi.pop_front();
-        }
-
         float timeRange = endTime - startTime;
 
         auto regionSize = ImGui::GetContentRegionAvail();
@@ -148,57 +215,39 @@ void demo_draw_midi()
             0xFFFFFFFF);
 
         // Iterate over the MIDI events and display them within the time range
-        for (auto itr = showMidi.begin(); itr != showMidi.end(); itr++)
+        for (auto& [noteKey, startEnd] : activeNotes)
         {
-            auto& msg = *itr;
+            auto noteBegin = std::clamp(startEnd.first, startTime, endTime);
+            auto noteEnd = std::clamp(startEnd.second, startTime, endTime);
 
             // Calculate the position of the event within the window
-            float xPos = regionMin.x + (msg.time - startTime) / timeRange * regionSize.x;
-            float yPos = regionMax.y - msg.key * 10.0f;
+            float xPos = regionMin.x + (((noteBegin - startTime) / timeRange) * regionSize.x);
+            float yPos = regionMax.y - (noteKey.key * 10.0f);
 
             // Set the color based on the event type
             ImU32 color = IM_COL32(255, 255, 255, 255); // Default color is white
-            if (msg.type == TML_NOTE_ON)
+            color = glm::packUnorm4x8(Zest::colors_get_default(noteKey.key));
+
+            float barWidth = ((noteEnd - noteBegin) / timeRange) * regionSize.x;
+
+            if ((xPos >= regionMin.x) && (barWidth <= regionSize.x))
             {
-                color = IM_COL32(255, 0, 0, 255); // Note on events are red
-
-                // Add the note to the active notes list
-                activeNotes[msg.key] = float(msg.time);
-                    
-                if (msg.time > endTime)
-                {
-                    break;
-                }
+                ImGui::GetWindowDrawList()->AddRectFilled(
+                    ImVec2(xPos, yPos),
+                    ImVec2(xPos + barWidth, yPos + 8.0f), // * (msg.velocity / 127.0f)),
+                    color);
             }
-            else if (msg.type == TML_NOTE_OFF)
+            else
             {
-                color = glm::packUnorm4x8(Zest::colors_get_default(msg.key));
-
-                // Check if there is a corresponding note on event
-                auto it = activeNotes.find(msg.key);
-                if (it != activeNotes.end())
-                {
-                    float noteOnTime = it->second;
-                    activeNotes.erase(it);
-
-                    // Calculate the width of the bar between TML_NOTE_ON and TML_NOTE_OFF events
-                    float barWidth = (msg.time - noteOnTime) / timeRange * regionSize.x;
-
-                    // Draw a colored bar between TML_NOTE_ON and TML_NOTE_OFF events
-                    ImGui::GetWindowDrawList()->AddRectFilled(
-                        ImVec2(xPos - barWidth, yPos),
-                        ImVec2(xPos, yPos + 8.0f * (msg.velocity / 127.0f)),
-                        color);
-
-                }
+                assert(!"WTF");
             }
-            // Add more color assignments for other event types if needed
 
             // Draw a vertical line at the position of the event
-            ImGui::GetWindowDrawList()->AddLine(
+            /* ImGui::GetWindowDrawList()->AddLine(
                 ImVec2(xPos, yPos),
                 ImVec2(xPos, yPos + 8.0f),
                 color);
+                */
         }
     }
     ImGui::End();
