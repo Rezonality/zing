@@ -136,10 +136,26 @@ struct std::hash<NoteKey>
 
 void demo_draw_midi()
 {
+    PROFILE_SCOPE(demo_draw_midi);
     float startTime = float(g_Msec) - 1000.0f;
     float endTime = float(g_Msec) + 2000.0f;
+    float currentTime = float(g_Msec);
 
-    static std::unordered_map<NoteKey, std::pair<float, float>> activeNotes; // Map note key to start time
+    struct DisplayNote
+    {
+        DisplayNote(float _start, int _key)
+            : start(_start)
+            , end(std::numeric_limits<float>::max())
+            , key(_key)
+        {
+        }
+        float start;
+        float end;
+        bool finished = false;
+        int key;
+    };
+
+    static std::unordered_map<NoteKey, std::deque<DisplayNote>> activeNotes; // Map note key to start time
     while (!showMidi.empty())
     {
         const auto& msg = showMidi.front();
@@ -158,14 +174,15 @@ void demo_draw_midi()
                 break;
             }
 
-            // Otherwise, record the note
-            if (itrFound != activeNotes.end())
+            if (!activeNotes[key].empty() && (!activeNotes[key].back().finished))
             {
-                assert(!"WTF");
+                // Skip
+                LOG(DBG, "Double note on...");
             }
             else
             {
-                activeNotes[key] = {time, std::numeric_limits<float>::max()};
+                // Add the new one
+                activeNotes[key].push_back(DisplayNote(time, key.key));
             }
         }
         else if (msg.type == TML_NOTE_OFF)
@@ -174,20 +191,56 @@ void demo_draw_midi()
             auto itrFound = activeNotes.find(key);
             if (itrFound != activeNotes.end())
             {
-                // Update the time range of this note
-                itrFound->second = {itrFound->second.first, time};
+                // Update the time range of the last note
+                itrFound->second.back().end = time;
+                itrFound->second.back().finished = true;
             }
         }
         showMidi.pop_front();
     }
 
+    struct ChannelRange
+    {
+        float low = std::numeric_limits<float>::max();
+        float high = std::numeric_limits<float>::min();
+        float step = 0;
+        bool empty = true;
+        int shrinkCount = 0;
+    };
+
+    std::map<int, ChannelRange> channelRanges;
+
+    for (auto& [channel, range] : channelRanges)
+    {
+        range.empty = true;
+    }
+
+    // Now cull
     auto itr = activeNotes.begin();
     while (itr != activeNotes.end())
     {
-        auto& timeRange = itr->second;
+        auto& displayNoteQueue = itr->second;
+        auto itrDisplayNote = displayNoteQueue.begin();
+        while (itrDisplayNote != displayNoteQueue.end())
+        {
+            // Remove this one
+            if (itrDisplayNote->end < startTime)
+            {
+                displayNoteQueue.pop_front();
+                itrDisplayNote = displayNoteQueue.begin();
+            }
+            else
+            {
+                channelRanges[itr->first.channel].low = std::min(channelRanges[itr->first.channel].low, float(itrDisplayNote->key));
+                channelRanges[itr->first.channel].high = std::max(channelRanges[itr->first.channel].high, float(itrDisplayNote->key));
+                channelRanges[itr->first.channel].empty = false;
 
-        // Kill notes that are before the timeline
-        if (timeRange.second < startTime)
+                itrDisplayNote++;
+            }
+        }
+
+        // Still have active notes
+        if (displayNoteQueue.empty())
         {
             itr = activeNotes.erase(itr);
         }
@@ -196,6 +249,24 @@ void demo_draw_midi()
             itr++;
         }
     };
+
+    float step = 0.0f;
+    for (auto& [channel, range] : channelRanges)
+    {
+        if (range.empty)
+        {
+            range.shrinkCount++;
+            if (range.shrinkCount > 100)
+            {
+                range.low = 0.0f;
+                range.high = 0.0f;
+                range.shrinkCount = 0;
+            }
+        }
+
+        range.step = step;
+        step += (range.high - range.low) + 2;
+    }
 
     if (ImGui::Begin("Midi"))
     {
@@ -215,31 +286,43 @@ void demo_draw_midi()
             0xFFFFFFFF);
 
         // Iterate over the MIDI events and display them within the time range
-        for (auto& [noteKey, startEnd] : activeNotes)
+        for (auto& [noteKey, displayNotes] : activeNotes)
         {
-            auto noteBegin = std::clamp(startEnd.first, startTime, endTime);
-            auto noteEnd = std::clamp(startEnd.second, startTime, endTime);
-
-            // Calculate the position of the event within the window
-            float xPos = regionMin.x + (((noteBegin - startTime) / timeRange) * regionSize.x);
-            float yPos = regionMax.y - (noteKey.key * 10.0f);
-
-            // Set the color based on the event type
-            ImU32 color = IM_COL32(255, 255, 255, 255); // Default color is white
-            color = glm::packUnorm4x8(Zest::colors_get_default(noteKey.key));
-
-            float barWidth = ((noteEnd - noteBegin) / timeRange) * regionSize.x;
-
-            if ((xPos >= regionMin.x) && (barWidth <= regionSize.x))
+            for (auto& displayNote : displayNotes)
             {
-                ImGui::GetWindowDrawList()->AddRectFilled(
-                    ImVec2(xPos, yPos),
-                    ImVec2(xPos + barWidth, yPos + 8.0f), // * (msg.velocity / 127.0f)),
-                    color);
-            }
-            else
-            {
-                assert(!"WTF");
+                auto& range = channelRanges[noteKey.channel];
+
+                auto noteBegin = std::clamp(displayNote.start, startTime, endTime);
+                auto noteEnd = std::clamp(displayNote.end, startTime, endTime);
+
+                // Calculate the position of the event within the window
+                float xPos = regionMin.x + (((noteBegin - startTime) / timeRange) * regionSize.x);
+                float yPos = regionMax.y - ((range.step + (noteKey.key - range.low)) * 5.0f);
+
+                // Set the color based on the event type
+                auto col = Zest::colors_get_default(noteKey.channel);
+                float barWidth = ((noteEnd - noteBegin) / timeRange) * regionSize.x;
+
+                if (noteBegin <= currentTime && noteEnd >= currentTime)
+                {
+                    col.w = 1.0f;
+                }
+                else
+                {
+                    col.w = 0.5f;
+                }
+                if ((xPos >= regionMin.x) && (barWidth <= regionSize.x))
+                {
+                    auto color = glm::packUnorm4x8(col);
+                    ImGui::GetWindowDrawList()->AddRectFilled(
+                        ImVec2(xPos, yPos),
+                        ImVec2(xPos + barWidth, yPos + 8.0f), // * (msg.velocity / 127.0f)),
+                        color);
+                }
+                else
+                {
+                    assert(!"WTF");
+                }
             }
 
             // Draw a vertical line at the position of the event
@@ -255,6 +338,7 @@ void demo_draw_midi()
 
 void demo_draw_analysis()
 {
+    PROFILE_SCOPE(demo_draw_analysis)
     auto& audioContext = GetAudioContext();
 
     size_t bufferWidth = 512;   // default width if no data
@@ -288,6 +372,8 @@ void demo_draw_analysis()
 
 void demo_draw()
 {
+    PROFILE_SCOPE(demo_draw)
+
     // Settings
     Zest::GlobalSettingsManager::Instance().DrawGUI("Settings");
 
