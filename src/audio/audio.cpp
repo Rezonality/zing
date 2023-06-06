@@ -10,7 +10,7 @@
 #include <zing/audio/midi.h>
 
 //#define LIBREMIDI_HEADER_ONLY
-//#include <libremidi/libremidi.hpp>
+#include <libremidi/libremidi.hpp>
 
 using namespace std::chrono;
 using namespace ableton;
@@ -217,10 +217,10 @@ void audio_process_midi(void* pOutput, uint32_t frameCount)
 {
     auto& ctx = audioContext;
 
-    auto time_ms = (ctx.m_frameCurrentTime.count() / double(milliseconds(1000).count()));
+    auto time_ms = timer_to_ms(timer_get_elapsed(ctx.m_masterClock));
 
     // Process midi
-    static tml_message msg;
+    static libremidi::message msg;
     static bool pendingMessage = false;
     static const uint64_t blockSize = 64;
 
@@ -256,24 +256,24 @@ void audio_process_midi(void* pOutput, uint32_t frameCount)
             }
         }
 
-        if (time_ms >= msg.time)
+        if (pendingMessage && (time_ms >= msg.timestamp))
         {
-            switch (msg.type)
+            switch (msg.get_message_type())
             {
-                case TML_PROGRAM_CHANGE: //channel program (preset) change (special handling for 10th MIDI channel with drums)
-                    tsf_channel_set_presetnumber(tsf, msg.channel, msg.program, (msg.channel == 9));
+                case libremidi::message_type::PROGRAM_CHANGE: //channel program (preset) change (special handling for 10th MIDI channel with drums)
+                    tsf_channel_set_presetnumber(tsf, msg.get_channel(), msg[1], (msg.get_channel() == 9));
                     break;
-                case TML_NOTE_ON: //play a note
-                    tsf_channel_note_on(tsf, msg.channel, msg.key, msg.velocity / 127.0f);
+                case libremidi::message_type::NOTE_ON: //play a note
+                    tsf_channel_note_on(tsf, msg.get_channel(), msg[1], msg[2]/ 127.0f);
                     break;
-                case TML_NOTE_OFF: //stop a note
-                    tsf_channel_note_off(tsf, msg.channel, msg.key);
+                case libremidi::message_type::NOTE_OFF: //stop a note
+                    tsf_channel_note_off(tsf, msg.get_channel(), msg[1]);
                     break;
-                case TML_PITCH_BEND: //pitch wheel modification
-                    tsf_channel_set_pitchwheel(tsf, msg.channel, msg.pitch_bend);
+                case libremidi::message_type::PITCH_BEND: //pitch wheel modification
+                    tsf_channel_set_pitchwheel(tsf, msg.get_channel(), msg[1]);
                     break;
-                case TML_CONTROL_CHANGE: //MIDI controller messages
-                    tsf_channel_midi_control(tsf, msg.channel, msg.control, msg.control_value);
+                case libremidi::message_type::CONTROL_CHANGE: //MIDI controller messages
+                    tsf_channel_midi_control(tsf, msg.get_channel(), msg[1], msg[2]);
                     break;
             }
             pendingMessage = false;
@@ -702,6 +702,8 @@ void audio_add_settings_hooks()
 bool audio_init(const AudioCB& fnCallback)
 {
     auto& ctx = audioContext;
+
+    timer_restart(ctx.m_masterClock);
 
     ctx.m_fnCallback = fnCallback;
 
@@ -1187,7 +1189,7 @@ std::string audio_to_channel_name(uint32_t channel)
     }
 }
 
-void audio_add_midi_event(const tml_message& msg)
+void audio_add_midi_event(const libremidi::message& msg)
 {
     auto& ctx = audioContext;
 

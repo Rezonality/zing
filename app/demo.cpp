@@ -4,7 +4,7 @@
 
 #include <zest/settings/settings.h>
 #include <zest/ui/colors.h>
-//#include <zest/time/timer.h>
+#include <zest/file/file.h>
 
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
@@ -12,15 +12,17 @@
 
 #include <config_zing_app.h>
 
+#include <libremidi/reader.hpp>
+
 using namespace Zing;
+using namespace Zest;
 using namespace std::chrono;
+using namespace libremidi;
 
 namespace
 {
 
-std::deque<tml_message> showMidi;
-Zest::timer midiTime;
-double midiBaseTime;
+std::deque<libremidi::message> showMidi;
 
 } //namespace
 
@@ -30,40 +32,45 @@ void demo_init()
 
     // Temporary load here of samples
     // Put a nicer/bigger soundfont here to hear a better rendition.
-    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
+    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
     //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/TimbresOfHeaven.sf2"));
-    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
+    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
     auto tsf = ctx.m_samples.samples["GM"].soundFont;
 
-    tml_message* pMidi = tml_load_filename(Zest::runtree_find_path("samples/midi/demo-1.mid").string().c_str());
+    auto midiFile = file_read(Zest::runtree_find_path("samples/midi/demo-1.mid"));
 
-    ctx.midiClients.push_back([](const tml_message& msg) {
+    auto pReader = std::make_shared<libremidi::reader>(true);
+    auto midiRes = pReader->parse((uint8_t*)midiFile.c_str(), midiFile.size());
+    if (midiRes != reader::validated)
+    {
+        pReader.reset();
+    }
+
+    ctx.midiClients.push_back([](const libremidi::message& msg) {
         showMidi.push_back(msg);
     });
 
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
-
         static bool init = false;
 
         if (!init)
         {
             auto& ctx = GetAudioContext();
-            auto time = ctx.m_frameCurrentTime.count() / double(1000.0);
+            auto time = timer_to_ms(timer_get_elapsed(ctx.m_masterClock));
             time += 3000.0;
-            midiBaseTime = time;
 
-            timer_restart(midiTime);
-            midiTime.startTime += milliseconds(3000);
-
-            auto pStream = pMidi;
-            // Queue the midi; just for the demo, reset the time.
-            while (pStream)
+            if (pReader)
             {
-                // TODO: this tml_message has a low time precision
-                tml_message msg = *pStream;
-                msg.time = msg.time + (unsigned int)time;
-                audio_add_midi_event(msg);
-                pStream = pStream->next;
+                // Queue the midi; just for the demo, reset the time.
+                for (const auto& track : pReader->tracks)
+                {
+                    for (const auto& msg : track)
+                    {
+                        auto m = msg.m;
+                        m.timestamp = msg.tick + time;
+                        audio_add_midi_event(m);
+                    }
+                }
             }
             init = true;
         }
@@ -95,20 +102,20 @@ void demo_draw_midi()
     PROFILE_SCOPE(demo_draw_midi);
 
     auto& ctx = GetAudioContext();
-    auto time = ctx.m_frameCurrentTime.count() / 1000.0f;
+    auto time = timer_to_ms(timer_get_elapsed(ctx.m_masterClock));
     auto startTime = time - 1000.0f;
     auto endTime = startTime + 3000.0f;
 
     struct DisplayNote
     {
-        DisplayNote(float _start, int _key)
+        DisplayNote(double _start, int _key)
             : start(_start)
-            , end(std::numeric_limits<float>::max())
+            , end(std::numeric_limits<double>::max())
             , key(_key)
         {
         }
-        float start;
-        float end;
+        double start;
+        double end;
         bool finished = false;
         int key;
     };
@@ -118,40 +125,45 @@ void demo_draw_midi()
     {
         const auto& msg = showMidi.front();
 
-        NoteKey key = NoteKey{msg.channel, msg.key};
-
-        float time = float(msg.time);
-
-        auto itrFound = activeNotes.find(key);
-        if (msg.type == TML_NOTE_ON)
+        if (msg.is_note_on_or_off())
         {
-            // This note starts after the end of the frame, ignore for now
-            // We'll come back later
-            if (msg.time >= endTime)
-            {
-                break;
-            }
+            NoteKey key = NoteKey{msg.get_channel(), msg[1]};
 
-            if (!activeNotes[key].empty() && (!activeNotes[key].back().finished))
-            {
-                // Skip
-                LOG(DBG, "Double note on...");
-            }
-            else
-            {
-                // Add the new one
-                activeNotes[key].push_back(DisplayNote(time, key.key));
-            }
-        }
-        else if (msg.type == TML_NOTE_OFF)
-        {
-            // Update the time
             auto itrFound = activeNotes.find(key);
-            if (itrFound != activeNotes.end())
+            if (msg.get_message_type() == libremidi::message_type::NOTE_ON)
             {
-                // Update the time range of the last note
-                itrFound->second.back().end = time;
-                itrFound->second.back().finished = true;
+
+                // This note starts after the end of the frame, ignore for now
+                // We'll come back later
+                if (msg.timestamp >= endTime)
+                {
+                    break;
+                }
+
+                if (!activeNotes[key].empty() && (!activeNotes[key].back().finished))
+                {
+                    // Skip
+                    LOG(DBG, "Double note on...");
+                }
+                else
+                {
+                    // Add the new one
+                    activeNotes[key].push_back(DisplayNote(msg.timestamp, key.key));
+                    LOG(DBG, "Note On: " << key.key << ", time: " << msg.timestamp);
+                }
+            }
+            else if (msg.get_message_type() == libremidi::message_type::NOTE_OFF)
+            {
+                // Update the time
+                auto itrFound = activeNotes.find(key);
+                if (itrFound != activeNotes.end())
+                {
+                    // Update the time range of the last note
+                    itrFound->second.back().end = msg.timestamp;
+                    itrFound->second.back().finished = true;
+                    
+                    LOG(DBG, "Note Off: " << key.key << ", time: " << msg.timestamp);
+                }
             }
         }
         showMidi.pop_front();
@@ -228,19 +240,19 @@ void demo_draw_midi()
 
     if (ImGui::Begin("Midi"))
     {
-        float timeRange = float(endTime - startTime);
+        auto timeRange = (endTime - startTime);
 
         auto regionSize = ImGui::GetContentRegionAvail();
         glm::vec2 regionMin(ImGui::GetCursorScreenPos());
         glm::vec2 regionMax(regionMin.x + regionSize.x, regionMin.y + regionSize.y);
 
-        float xPos = regionMin.x;
+        double xPos = regionMin.x;
         float yPos = regionMin.y;
 
-        xPos += (1000.0f / timeRange) * regionSize.x;
+        xPos += (1000.0 / timeRange) * regionSize.x;
         ImGui::GetWindowDrawList()->AddLine(
-            ImVec2(xPos, yPos),
-            ImVec2(xPos + 1, yPos + regionSize.y),
+            ImVec2(float(xPos), yPos),
+            ImVec2(float(xPos) + 1.0f, yPos + regionSize.y),
             0xFFFFFFFF);
 
         // Iterate over the MIDI events and display them within the time range
@@ -254,12 +266,12 @@ void demo_draw_midi()
                 auto noteEnd = std::clamp(displayNote.end, startTime, endTime);
 
                 // Calculate the position of the event within the window
-                float xPos = regionMin.x + (((noteBegin - startTime) / timeRange) * regionSize.x);
-                float yPos = regionMax.y - ((range.step + (noteKey.key - range.low)) * 5.0f);
+                auto xPos = regionMin.x + (((noteBegin - startTime) / timeRange) * regionSize.x);
+                auto yPos = regionMax.y - ((range.step + (noteKey.key - range.low)) * 5.0f);
 
                 // Set the color based on the event type
                 auto col = Zest::colors_get_default(noteKey.channel);
-                float barWidth = ((noteEnd - noteBegin) / timeRange) * regionSize.x;
+                auto barWidth = ((noteEnd - noteBegin) / timeRange) * regionSize.x;
 
                 if (noteBegin <= time && noteEnd >= time)
                 {
@@ -273,8 +285,8 @@ void demo_draw_midi()
                 {
                     auto color = glm::packUnorm4x8(col);
                     ImGui::GetWindowDrawList()->AddRectFilled(
-                        ImVec2(xPos, yPos),
-                        ImVec2(xPos + barWidth, yPos + 8.0f), // * (msg.velocity / 127.0f)),
+                        ImVec2(float(xPos), yPos),
+                        ImVec2(float(xPos + barWidth), yPos + 8.0f), // * (msg.velocity / 127.0f)),
                         color);
                 }
                 else

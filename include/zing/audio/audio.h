@@ -140,7 +140,7 @@ struct LinkData
     bool startStopSyncOn = true;
 };
 
-using fnMidiBroadcast = std::function<void(const tml_message&)>;
+using fnMidiBroadcast = std::function<void(const libremidi::message&)>;
 
 struct AudioContext
 {
@@ -199,6 +199,7 @@ struct AudioContext
     int m_numPeers;
 
     // Total frames of audio sent, since start
+    // These on the audio thread.
     uint64_t m_totalFrames = 0;
     std::chrono::microseconds m_frameInitTime;      // Start time for when we begin sending audio frames
     std::chrono::microseconds m_frameCurrentTime;   // Current time of audio frame
@@ -206,8 +207,12 @@ struct AudioContext
     AudioSamples m_samples;
 
     // Midi
-    moodycamel::ConcurrentQueue<tml_message> midi;
+    moodycamel::ConcurrentQueue<libremidi::message> midi;
 
+    // Master timer
+    Zest::timer m_masterClock;
+
+    // Clients
     std::vector<fnMidiBroadcast> midiClients;
 };
 
@@ -228,7 +233,7 @@ std::shared_ptr<AudioBundle> audio_get_bundle();
 void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle);
 
 std::string audio_to_channel_name(uint32_t channel);
-void audio_add_midi_event(const tml_message& msg);
+void audio_add_midi_event(const libremidi::message& msg);
 
 #define CHECK_NOT_AUDIO_THREAD assert(std::this_thread::get_id() != ctx.threadId);
 
