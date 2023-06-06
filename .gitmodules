@@ -1,12 +1,16 @@
 [submodule "vcpkg"]
 	path = vcpkg
 	url = https://github.com/Microsoft/vcpkg
+    branch = master
 [submodule "libs/zest"]
 	path = libs/zest
-	url = https://github.com/Rezonality/zest
+    url = https://github.com/Rezonality/zest
+    branch = main
 [submodule "libs/tsf"]
 	path = libs/tsf
 	url = https://github.com/schellingb/TinySoundFont.git
+    branch = master
 [submodule "libs/remidi"]
 	path = libs/remidi
-	url = https://github.com/jcelerier/libremidi.git
+    url = https://github.com/jcelerier/libremidi.git
+    branch = master
