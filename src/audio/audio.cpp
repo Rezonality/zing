@@ -213,6 +213,84 @@ void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput,
     }
 }
 
+void audio_process_midi(void* pOutput, uint32_t frameCount)
+{
+    auto& ctx = audioContext;
+
+    auto time_ms = (ctx.m_frameCurrentTime.count() / double(milliseconds(1000).count()));
+
+    // Process midi
+    static tml_message msg;
+    static bool pendingMessage = false;
+    static const uint64_t blockSize = 64;
+
+    uint64_t currentBlockSize = 0;
+    assert(frameCount % blockSize == 0);
+
+    auto pOut = (float*)pOutput;
+
+    auto emptyTheBlock = [&]() {
+        if (currentBlockSize > 0)
+        {
+            samples_render(ctx.m_samples, pOut, int(currentBlockSize));
+            currentBlockSize = 0;
+            pOut += (blockSize * ctx.outputState.channelCount);
+        }
+    };
+
+    auto pContainer = samples_find(ctx.m_samples);
+    if (!pContainer || !pContainer->soundFont)
+    {
+        return;
+    }
+
+    auto tsf = pContainer->soundFont;
+
+    for (uint32_t sample = 0; sample < frameCount; sample++)
+    {
+        if (!pendingMessage)
+        {
+            if (ctx.midi.try_dequeue(msg))
+            {
+                pendingMessage = true;
+            }
+        }
+
+        if (time_ms >= msg.time)
+        {
+            switch (msg.type)
+            {
+                case TML_PROGRAM_CHANGE: //channel program (preset) change (special handling for 10th MIDI channel with drums)
+                    tsf_channel_set_presetnumber(tsf, msg.channel, msg.program, (msg.channel == 9));
+                    break;
+                case TML_NOTE_ON: //play a note
+                    tsf_channel_note_on(tsf, msg.channel, msg.key, msg.velocity / 127.0f);
+                    break;
+                case TML_NOTE_OFF: //stop a note
+                    tsf_channel_note_off(tsf, msg.channel, msg.key);
+                    break;
+                case TML_PITCH_BEND: //pitch wheel modification
+                    tsf_channel_set_pitchwheel(tsf, msg.channel, msg.pitch_bend);
+                    break;
+                case TML_CONTROL_CHANGE: //MIDI controller messages
+                    tsf_channel_midi_control(tsf, msg.channel, msg.control, msg.control_value);
+                    break;
+            }
+            pendingMessage = false;
+        }
+
+        time_ms += 1000.0 / ctx.outputState.sampleRate;
+        currentBlockSize++;
+
+        if (currentBlockSize == blockSize)
+        {
+            emptyTheBlock();
+        }
+    }
+
+    emptyTheBlock();
+}
+
 // This tick() function handles sample computation only.  It will be
 // called automatically when the system needs a new buffer of audio
 // samples.
@@ -236,6 +314,12 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
         return 0;
     }
 
+    if (ctx.m_totalFrames == 0)
+    {
+        ctx.m_frameInitTime = ctx.m_link.clock().micros();
+        ctx.m_frameCurrentTime = ctx.m_frameInitTime;
+    }
+
     ctx.threadId = std::this_thread::get_id();
     ctx.inputState.frames = nBufferFrames;
     ctx.outputState.frames = nBufferFrames;
@@ -245,16 +329,19 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     const auto bufferDuration = duration_cast<microseconds>(duration<double>{nBufferFrames / sampleRate});
 
     // Link
-    const auto hostTime = ctx.m_hostTimeFilter.sampleTimeToHostTime(ctx.m_sampleTime);
-    ctx.m_sampleTime += double(nBufferFrames);
-    const auto bufferBeginAtOutput = hostTime + ctx.m_outputLatency.load();
+    auto hostTimeAtFrame = ctx.m_hostTimeFilter.sampleTimeToHostTime(double(ctx.m_totalFrames));
+    ctx.m_totalFrames += nBufferFrames;
+    const auto bufferBeginAtOutput = hostTimeAtFrame + ctx.m_outputLatency.load();
+    // Link
 
     auto samples = (float*)outputBuffer;
 
     // Ensure TP has same tempo
     // TimeProvider::Instance().SetTempo(sessionState.tempo(), 4.0);
 
-    audio_pre_callback(hostTime, outputBuffer, nBufferFrames);
+    audio_pre_callback(hostTimeAtFrame, outputBuffer, nBufferFrames);
+
+    audio_process_midi(outputBuffer, nBufferFrames);
 
     auto sendAnalysis = [&](auto& state, const float* pBuffer, uint32_t frames) {
         for (uint32_t i = 0; i < state.channelCount; i++)
@@ -302,6 +389,8 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
 
     ctx.inputState.totalFrames += nBufferFrames;
     ctx.outputState.totalFrames += nBufferFrames;
+
+    ctx.m_frameCurrentTime += bufferDuration;
 
     return 0;
 }

@@ -87,4 +87,17 @@ void samples_render(AudioSamples& audioSamples, float* pOutput, uint32_t numSamp
     }
 }
 
+const SampleContainer* samples_find(AudioSamples& audioSamples)
+{
+    auto& ctx = GetAudioContext();
+    for (auto& [id, container] : audioSamples.samples)
+    {
+        if (container.soundFont)
+        {
+            return &container;
+        }
+    }
+    return nullptr;
+}
+
 } //namespace Zing

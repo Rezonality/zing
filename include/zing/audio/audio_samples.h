@@ -25,5 +25,6 @@ bool samples_add(AudioSamples& samples, Zest::StringId id, const fs::path& path)
 void samples_stop(AudioSamples& samples);
 void samples_update_rate(AudioSamples& audioSamples);
 void samples_render(AudioSamples& audioSamples, float* pOutput, uint32_t numSamples);
+const SampleContainer* samples_find(AudioSamples& audioSamples);
 
 } //namespace Zing

@@ -166,7 +166,6 @@ struct AudioContext
     std::atomic<uint64_t> analysisWriteGeneration = 0;
     std::atomic<uint64_t> analysisReadGeneration = 0;
 
-    double m_sampleTime = 0.0;
     std::thread::id threadId;
     std::vector<std::string> m_deviceNames;
     std::vector<std::string> m_apiNames;
@@ -192,13 +191,17 @@ struct AudioContext
     LinkData m_linkData;
     LinkData m_lockFreeLinkData;
     ableton::Link m_link = ableton::Link(20.0);
-    std::chrono::microseconds m_timeAtLastClick;    // Metronome
     bool m_clicking = false;
     double m_clickFrequency;
     double m_clickTime = 0.0;
     int64_t m_lastClickBeat = 0;
     double m_tempo;
     int m_numPeers;
+
+    // Total frames of audio sent, since start
+    uint64_t m_totalFrames = 0;
+    std::chrono::microseconds m_frameInitTime;      // Start time for when we begin sending audio frames
+    std::chrono::microseconds m_frameCurrentTime;   // Current time of audio frame
 
     AudioSamples m_samples;
 

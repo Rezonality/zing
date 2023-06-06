@@ -4,6 +4,7 @@
 
 #include <zest/settings/settings.h>
 #include <zest/ui/colors.h>
+//#include <zest/time/timer.h>
 
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
@@ -18,7 +19,8 @@ namespace
 {
 
 std::deque<tml_message> showMidi;
-static double g_Msec = 0.0; //current playback time
+Zest::timer midiTime;
+double midiBaseTime;
 
 } //namespace
 
@@ -27,90 +29,44 @@ void demo_init()
     auto& ctx = GetAudioContext();
 
     // Temporary load here of samples
+    // Put a nicer/bigger soundfont here to hear a better rendition.
     samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
+    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/TimbresOfHeaven.sf2"));
+    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
     auto tsf = ctx.m_samples.samples["GM"].soundFont;
 
-    tml_message* pMidi = tml_load_filename(Zest::runtree_find_path("samples/sf2/demo-1.mid").string().c_str());
+    tml_message* pMidi = tml_load_filename(Zest::runtree_find_path("samples/midi/demo-1.mid").string().c_str());
 
     ctx.midiClients.push_back([](const tml_message& msg) {
         showMidi.push_back(msg);
     });
 
-    // Queue the midi
-    while (pMidi)
-    {
-        audio_add_midi_event(*pMidi);
-        pMidi = pMidi->next;
-    }
-
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
-        auto& ctx = GetAudioContext();
 
-        if (!tsf)
+        static bool init = false;
+
+        if (!init)
         {
-            return;
+            auto& ctx = GetAudioContext();
+            auto time = ctx.m_frameCurrentTime.count() / double(1000.0);
+            time += 3000.0;
+            midiBaseTime = time;
+
+            timer_restart(midiTime);
+            midiTime.startTime += milliseconds(3000);
+
+            auto pStream = pMidi;
+            // Queue the midi; just for the demo, reset the time.
+            while (pStream)
+            {
+                // TODO: this tml_message has a low time precision
+                tml_message msg = *pStream;
+                msg.time = msg.time + (unsigned int)time;
+                audio_add_midi_event(msg);
+                pStream = pStream->next;
+            }
+            init = true;
         }
-        static tml_message msg;
-        static bool pendingMessage = false;
-        static const uint64_t blockSize = 64;
-
-        uint64_t currentBlockSize = 0;
-        assert(numSamples % blockSize == 0);
-
-        auto pOut = (float*)pOutput;
-
-        auto emptyTheBlock = [&]() {
-            if (currentBlockSize > 0)
-            {
-                samples_render(ctx.m_samples, pOut, int(currentBlockSize));
-                currentBlockSize = 0;
-                pOut += (blockSize * ctx.outputState.channelCount);
-            }
-        };
-
-        for (uint32_t sample = 0; sample < numSamples; sample++)
-        {
-            if (!pendingMessage)
-            {
-                if (ctx.midi.try_dequeue(msg))
-                {
-                    pendingMessage = true;
-                }
-            }
-
-            if (g_Msec >= msg.time)
-            {
-                switch (msg.type)
-                {
-                    case TML_PROGRAM_CHANGE: //channel program (preset) change (special handling for 10th MIDI channel with drums)
-                        tsf_channel_set_presetnumber(tsf, msg.channel, msg.program, (msg.channel == 9));
-                        break;
-                    case TML_NOTE_ON: //play a note
-                        tsf_channel_note_on(tsf, msg.channel, msg.key, msg.velocity / 127.0f);
-                        break;
-                    case TML_NOTE_OFF: //stop a note
-                        tsf_channel_note_off(tsf, msg.channel, msg.key);
-                        break;
-                    case TML_PITCH_BEND: //pitch wheel modification
-                        tsf_channel_set_pitchwheel(tsf, msg.channel, msg.pitch_bend);
-                        break;
-                    case TML_CONTROL_CHANGE: //MIDI controller messages
-                        tsf_channel_midi_control(tsf, msg.channel, msg.control, msg.control_value);
-                        break;
-                }
-                pendingMessage = false;
-            }
-
-            g_Msec += 1000.0 / ctx.outputState.sampleRate;
-            currentBlockSize++;
-
-            if (currentBlockSize == blockSize)
-            {
-                emptyTheBlock();
-            }
-        }
-
-        emptyTheBlock();
     });
 }
 
@@ -137,9 +93,11 @@ struct std::hash<NoteKey>
 void demo_draw_midi()
 {
     PROFILE_SCOPE(demo_draw_midi);
-    float startTime = float(g_Msec) - 1000.0f;
-    float endTime = float(g_Msec) + 2000.0f;
-    float currentTime = float(g_Msec);
+
+    auto& ctx = GetAudioContext();
+    auto time = ctx.m_frameCurrentTime.count() / 1000.0f;
+    auto startTime = time - 1000.0f;
+    auto endTime = startTime + 3000.0f;
 
     struct DisplayNote
     {
@@ -270,7 +228,7 @@ void demo_draw_midi()
 
     if (ImGui::Begin("Midi"))
     {
-        float timeRange = endTime - startTime;
+        float timeRange = float(endTime - startTime);
 
         auto regionSize = ImGui::GetContentRegionAvail();
         glm::vec2 regionMin(ImGui::GetCursorScreenPos());
@@ -303,7 +261,7 @@ void demo_draw_midi()
                 auto col = Zest::colors_get_default(noteKey.channel);
                 float barWidth = ((noteEnd - noteBegin) / timeRange) * regionSize.x;
 
-                if (noteBegin <= currentTime && noteEnd >= currentTime)
+                if (noteBegin <= time && noteEnd >= time)
                 {
                     col.w = 1.0f;
                 }
@@ -374,6 +332,9 @@ void demo_draw()
 {
     PROFILE_SCOPE(demo_draw)
 
+    auto& ctx = GetAudioContext();
+    auto hostTime = duration_cast<milliseconds>(ctx.m_link.clock().micros());
+
     // Settings
     Zest::GlobalSettingsManager::Instance().DrawGUI("Settings");
 
@@ -388,7 +349,6 @@ void demo_draw()
     audio_show_settings_gui();
     ImGui::End();
 
-    auto& ctx = GetAudioContext();
     ImGui::Begin("Audio");
 
     ImGui::SeparatorText("Link");
