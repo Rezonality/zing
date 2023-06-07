@@ -137,7 +137,7 @@ void audio_play_metronome(const Link::SessionState sessionState, const double qu
             }
         }
 
-        if (ctx.m_clicking && ctx.m_playMetronome)
+        if (ctx.m_clicking && ctx.settings.enableMetronome)
         {
             // Simple cosine synth
             amplitude = float(cos(2 * glm::pi<double>() * ctx.m_clickTime * ctx.m_clickFrequency) * (1 - sin(5 * glm::pi<double>() * ctx.m_clickTime)));
@@ -235,7 +235,10 @@ void audio_process_midi(void* pOutput, uint32_t frameCount)
     auto emptyTheBlock = [&]() {
         if (currentBlockSize > 0)
         {
-            samples_render(ctx.m_samples, pOut, int(currentBlockSize));
+            if (ctx.settings.enableMidi)
+            {
+                samples_render(ctx.m_samples, pOut, int(currentBlockSize));
+            }
             currentBlockSize = 0;
             pOut += (blockSize * ctx.outputState.channelCount);
         }
@@ -1196,59 +1199,42 @@ void audio_add_midi_event(const libremidi::message& msg)
 {
     auto& ctx = audioContext;
 
+    // Queue the midi using the concurrent lock free queue
     ctx.midi.enqueue(msg);
 
+    // Inform listeners
     for (auto& fnMidi : ctx.midiClients)
     {
         fnMidi(msg);
     }
 }
 
+// A fix/workaround so that libremidi tracks have the correct audio sequencing
+// May not play back midi, but this makes it work well
 void audio_calculate_midi_timings(std::vector<libremidi::midi_track>& tracks, float ticksPerBeat)
 {
-    unsigned int ticks = 0, tempo_ticks = 0;              //tick counter and value at last tempo change
-    int step_smallest, msec, tempo_msec = 0;              //msec value at last tempo change
-    double ticks2time = 500000 / (1000.0 * ticksPerBeat); //milliseconds per tick
-
-    int trackTicks = 0;
-    std::vector<uint32_t> trackIndices;
-    for (uint32_t i = 0; i < tracks.size(); i++)
+    for (auto& track : tracks)
     {
-        trackIndices.push_back(i);
-    }
-
-    // Loop through all messages over all tracks ordered by time
-    for (step_smallest = 0; step_smallest != 0x7fffffff; ticks += step_smallest)
-    {
-        step_smallest = 0x7fffffff;
-        msec = tempo_msec + (int)((ticks - tempo_ticks) * ticks2time);
-        unsigned int lastTime = 0;
-        for (uint32_t track = 0; track < tracks.size(); track++)
+        uint32_t tempoTickStart = 0;
+        uint32_t ticks = 0;
+        uint32_t tempoMs = 0;
+        double ticks2time = 500000 / (1000.0 * ticksPerBeat); //milliseconds per tick
+        for (auto& message : track)
         {
-            if (trackIndices[track] < tracks[track].size())
+            assert(message.tick >= 0 && message.tick < 10000);
+            ticks += message.tick;
+            auto ms = tempoMs + (int)((ticks - tempoTickStart) * ticks2time);
+            if (message.m.is_meta_event() && message.m.get_meta_event_type() == libremidi::meta_event_type::TEMPO_CHANGE)
             {
-                auto& ev = tracks[track][trackIndices[track]];
-                auto& Msg = ev.m;
-                trackTicks += ev.tick;
-                if (Msg.get_meta_event_type() == libremidi::meta_event_type::TEMPO_CHANGE)
-                {
-                    ticks2time = ((Msg[0] << 16) | (Msg[1] << 8) | Msg[2]) / (1000.0 * ticksPerBeat);
-                    tempo_msec = msec;
-                    tempo_ticks = ticks;
-                }
-                else if (Msg.is_note_on_or_off())
-                {
-                    Msg.timestamp = msec;
-                    lastTime = msec;
-                }
-                trackIndices[track]++;
+                ticks2time = ((message.m[3] << 16) | (message.m[4] << 8) | message.m[5]) / (1000.0 * ticksPerBeat);
+                assert(ticks2time > 0.0 && ticks2time < 50.0);
+                tempoTickStart = ticks;
+                tempoMs = ms;
             }
-        }
-        if (((trackTicks + lastTime) > ticks))
-        {
-            int step = (int)(trackTicks + lastTime - ticks);
-            if (step < step_smallest)
-                step_smallest = step;
+            else
+            {
+                message.m.timestamp = ms;
+            }
         }
     }
 }

@@ -38,6 +38,7 @@ struct AudioBundle
 struct AudioSettings
 {
     std::atomic<bool> enableMetronome = false;
+    std::atomic<bool> enableMidi = true;
 };
 
 using AudioCB = std::function<void(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)>;
@@ -149,7 +150,6 @@ struct AudioContext
     bool m_audioValid = false;
     bool m_changedDeviceCombo = true;
 
-    std::atomic<bool> m_playMetronome = false;
     AudioCB m_fnCallback = nullptr;
 
     AudioChannelState inputState;
@@ -217,11 +217,6 @@ struct AudioContext
 };
 
 AudioContext& GetAudioContext();
-
-inline glm::uvec4 Div(const glm::uvec4& val, uint32_t div)
-{
-    return glm::uvec4(val.x / div, val.y / div, val.z / div, val.w / div);
-}
 
 void audio_add_settings_hooks();
 bool audio_init(const AudioCB& fnCallback);
