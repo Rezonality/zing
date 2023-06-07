@@ -219,6 +219,9 @@ void audio_process_midi(void* pOutput, uint32_t frameCount)
 
     auto time_ms = timer_to_ms(timer_get_elapsed(ctx.m_masterClock));
 
+    // Make time seem sooner by the latency, so we hear the sound when it is due
+    time_ms += (ctx.m_outputLatency.load().count() / 1000.0);
+
     // Process midi
     static libremidi::message msg;
     static bool pendingMessage = false;
@@ -261,19 +264,19 @@ void audio_process_midi(void* pOutput, uint32_t frameCount)
             switch (msg.get_message_type())
             {
                 case libremidi::message_type::PROGRAM_CHANGE: //channel program (preset) change (special handling for 10th MIDI channel with drums)
-                    tsf_channel_set_presetnumber(tsf, msg.get_channel(), msg[1], (msg.get_channel() == 9));
+                    tsf_channel_set_presetnumber(tsf, msg.get_channel(), msg[1], (msg.get_channel() == 10));
+                    break;
+                case libremidi::message_type::CONTROL_CHANGE: //MIDI controller messages
+                    tsf_channel_midi_control(tsf, msg.get_channel(), msg[1], msg[2]);
                     break;
                 case libremidi::message_type::NOTE_ON: //play a note
-                    tsf_channel_note_on(tsf, msg.get_channel(), msg[1], msg[2]/ 127.0f);
+                    tsf_channel_note_on(tsf, msg.get_channel(), msg[1], msg[2] / 127.0f);
                     break;
                 case libremidi::message_type::NOTE_OFF: //stop a note
                     tsf_channel_note_off(tsf, msg.get_channel(), msg[1]);
                     break;
                 case libremidi::message_type::PITCH_BEND: //pitch wheel modification
-                    tsf_channel_set_pitchwheel(tsf, msg.get_channel(), msg[1]);
-                    break;
-                case libremidi::message_type::CONTROL_CHANGE: //MIDI controller messages
-                    tsf_channel_midi_control(tsf, msg.get_channel(), msg[1], msg[2]);
+                    tsf_channel_set_pitchwheel(tsf, msg.get_channel(), (uint32_t(msg[1]) | uint32_t(msg[2] << 7)));
                     break;
             }
             pendingMessage = false;
@@ -1198,6 +1201,55 @@ void audio_add_midi_event(const libremidi::message& msg)
     for (auto& fnMidi : ctx.midiClients)
     {
         fnMidi(msg);
+    }
+}
+
+void audio_calculate_midi_timings(std::vector<libremidi::midi_track>& tracks, float ticksPerBeat)
+{
+    unsigned int ticks = 0, tempo_ticks = 0;              //tick counter and value at last tempo change
+    int step_smallest, msec, tempo_msec = 0;              //msec value at last tempo change
+    double ticks2time = 500000 / (1000.0 * ticksPerBeat); //milliseconds per tick
+
+    int trackTicks = 0;
+    std::vector<uint32_t> trackIndices;
+    for (uint32_t i = 0; i < tracks.size(); i++)
+    {
+        trackIndices.push_back(i);
+    }
+
+    // Loop through all messages over all tracks ordered by time
+    for (step_smallest = 0; step_smallest != 0x7fffffff; ticks += step_smallest)
+    {
+        step_smallest = 0x7fffffff;
+        msec = tempo_msec + (int)((ticks - tempo_ticks) * ticks2time);
+        unsigned int lastTime = 0;
+        for (uint32_t track = 0; track < tracks.size(); track++)
+        {
+            if (trackIndices[track] < tracks[track].size())
+            {
+                auto& ev = tracks[track][trackIndices[track]];
+                auto& Msg = ev.m;
+                trackTicks += ev.tick;
+                if (Msg.get_meta_event_type() == libremidi::meta_event_type::TEMPO_CHANGE)
+                {
+                    ticks2time = ((Msg[0] << 16) | (Msg[1] << 8) | Msg[2]) / (1000.0 * ticksPerBeat);
+                    tempo_msec = msec;
+                    tempo_ticks = ticks;
+                }
+                else if (Msg.is_note_on_or_off())
+                {
+                    Msg.timestamp = msec;
+                    lastTime = msec;
+                }
+                trackIndices[track]++;
+            }
+        }
+        if (((trackTicks + lastTime) > ticks))
+        {
+            int step = (int)(trackTicks + lastTime - ticks);
+            if (step < step_smallest)
+                step_smallest = step;
+        }
     }
 }
 

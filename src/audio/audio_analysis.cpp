@@ -317,7 +317,7 @@ void audio_analysis_calculate_spectrum(AudioAnalysis& analysis, AudioAnalysisDat
     auto& spectrum = analysisData.spectrum;
     auto& spectrumBuckets = analysisData.spectrumBuckets;
 
-    LOG(DBG, "Analysis Writing: " << (analysis.thisChannel == 0 ? "L" : "R") << ": " << audio_analysis_write_index(analysisData));
+    //LOG(DBG, "Analysis Writing: " << (analysis.thisChannel == 0 ? "L" : "R") << ": " << audio_analysis_write_index(analysisData));
     for (uint32_t i = 0; i < analysis.outputSamples; i++)
     {
         // Magnitude

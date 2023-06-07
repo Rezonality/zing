@@ -2,9 +2,9 @@
 
 #include <deque>
 
+#include <zest/file/file.h>
 #include <zest/settings/settings.h>
 #include <zest/ui/colors.h>
-#include <zest/file/file.h>
 
 #include <zing/audio/audio.h>
 #include <zing/audio/audio_analysis.h>
@@ -32,18 +32,22 @@ void demo_init()
 
     // Temporary load here of samples
     // Put a nicer/bigger soundfont here to hear a better rendition.
-    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
+    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
     //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/TimbresOfHeaven.sf2"));
-    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
+    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
     auto tsf = ctx.m_samples.samples["GM"].soundFont;
 
     auto midiFile = file_read(Zest::runtree_find_path("samples/midi/demo-1.mid"));
 
-    auto pReader = std::make_shared<libremidi::reader>(true);
+    auto pReader = std::make_shared<libremidi::reader>();
     auto midiRes = pReader->parse((uint8_t*)midiFile.c_str(), midiFile.size());
     if (midiRes != reader::validated)
     {
         pReader.reset();
+    }
+    else
+    {
+        audio_calculate_midi_timings(pReader->tracks, pReader->ticksPerBeat);
     }
 
     ctx.midiClients.push_back([](const libremidi::message& msg) {
@@ -59,15 +63,18 @@ void demo_init()
             auto time = timer_to_ms(timer_get_elapsed(ctx.m_masterClock));
             time += 3000.0;
 
+            //static const double ticks2time = 500000 / (1000.0 * pReader->ticksPerBeat); //milliseconds per tick
             if (pReader)
             {
                 // Queue the midi; just for the demo, reset the time.
                 for (const auto& track : pReader->tracks)
                 {
+                    //double tick = time;
                     for (const auto& msg : track)
                     {
+                        //tick += msg.tick * ticks2time;
                         auto m = msg.m;
-                        m.timestamp = msg.tick + time;
+                        m.timestamp = m.timestamp + time;
                         audio_add_midi_event(m);
                     }
                 }
@@ -124,6 +131,11 @@ void demo_draw_midi()
     while (!showMidi.empty())
     {
         const auto& msg = showMidi.front();
+        if (msg.size() == 0)
+        {
+            showMidi.pop_front();
+            continue;
+        }
 
         if (msg.is_note_on_or_off())
         {
@@ -149,7 +161,7 @@ void demo_draw_midi()
                 {
                     // Add the new one
                     activeNotes[key].push_back(DisplayNote(msg.timestamp, key.key));
-                    LOG(DBG, "Note On: " << key.key << ", time: " << msg.timestamp);
+                    //LOG(DBG, "Note On: " << key.key << ", time: " << msg.timestamp);
                 }
             }
             else if (msg.get_message_type() == libremidi::message_type::NOTE_OFF)
@@ -161,8 +173,8 @@ void demo_draw_midi()
                     // Update the time range of the last note
                     itrFound->second.back().end = msg.timestamp;
                     itrFound->second.back().finished = true;
-                    
-                    LOG(DBG, "Note Off: " << key.key << ", time: " << msg.timestamp);
+
+                    //LOG(DBG, "Note Off: " << key.key << ", time: " << msg.timestamp);
                 }
             }
         }

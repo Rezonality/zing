@@ -235,6 +235,8 @@ void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle);
 std::string audio_to_channel_name(uint32_t channel);
 void audio_add_midi_event(const libremidi::message& msg);
 
+void audio_calculate_midi_timings(std::vector<libremidi::midi_track>& track, float ticksPerBeat);
+
 #define CHECK_NOT_AUDIO_THREAD assert(std::this_thread::get_id() != ctx.threadId);
 
 // Can't currently use this one since audio threads might be in a pool.  TLS?
