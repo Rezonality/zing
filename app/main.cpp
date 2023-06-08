@@ -1,7 +1,6 @@
 #pragma warning(disable : 4005)
 #include "pch.h"
 #include <zest/settings/settings.h>
-#include <zest/ui/layout_manager.h>
 
 #include <zing/audio/audio.h>
 
@@ -585,11 +584,9 @@ int main(int, char**)
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL2_NewFrame();
 
-        ImGui::NewFrame();
+        demo_tick();
 
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
+        ImGui::NewFrame();
 
         if (demo_start)
         {

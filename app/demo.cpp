@@ -34,6 +34,8 @@ bool showMidiWindow = true;
 bool showAudioSettings = true;
 bool showAudio = true;
 bool showProfiler = true;
+bool showDebugSettings = false;
+bool showDemoWindow = false;
 
 } //namespace
 
@@ -115,8 +117,8 @@ void demo_load_gm_sound_font()
     auto& ctx = GetAudioContext();
 
     // Put a nicer/bigger soundfont here to hear a better rendition.
-    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
-    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
+    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
+    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
 }
 
 void demo_register_windows()
@@ -125,8 +127,10 @@ void demo_register_windows()
     layout_manager_register_window("profiler", "Profiler", &showProfiler);
     layout_manager_register_window("audio", "Audio State", &showAudio);
     layout_manager_register_window("settings", "Audio Settings", &showAudioSettings);
+    layout_manager_register_window("debug_settings", "Debug Settings", &showDebugSettings);
+    layout_manager_register_window("demo_window", "Demo Window", &showDemoWindow);
 
-    layout_manager_load_layouts_file("zing", [](const LayoutInfo& info) {
+    layout_manager_load_layouts_file("zing", [](const std::string& name, const LayoutInfo& info) {
         if (!info.windowLayout.empty())
         {
             ImGui::LoadIniSettingsFromMemory(info.windowLayout.c_str());
@@ -211,13 +215,14 @@ void demo_show_analysis()
     }
 }
 
-void demo_draw()
+// Called outside of the the ImGui frame
+void demo_tick()
 {
-    PROFILE_SCOPE(demo_draw)
+    layout_manager_update();
+}
 
-    auto& ctx = GetAudioContext();
-    auto hostTime = duration_cast<milliseconds>(ctx.m_link.clock().micros());
-
+void demo_draw_menu()
+{
     if (ImGui::BeginMainMenuBar())
     {
         if (ImGui::BeginMenu("Window"))
@@ -225,23 +230,32 @@ void demo_draw()
             layout_manager_do_menu();
             ImGui::EndMenu();
         }
-        /* if (ImGui::BeginMenu(fmt::format("FPS: {:.0f}", ImGui::GetIO().Framerate).c_str()))
-        {
-            ImGui::EndMenu();
-        }*/
+
         ImGui::EndMainMenuBar();
     }
-    /*
-    if (m_popupRequest == PopupRequest::Layout)
+
+    layout_manager_do_menu_popups();
+}
+
+void demo_draw()
+{
+    PROFILE_SCOPE(demo_draw)
+
+    auto& ctx = GetAudioContext();
+    auto hostTime = duration_cast<milliseconds>(ctx.m_link.clock().micros());
+
+    demo_draw_menu();
+
+    if (showDemoWindow)
     {
-        ImGui::OpenPopup("LayoutName");
-        m_popupRequest = PopupRequest::None;
+        ImGui::ShowDemoWindow(&showDemoWindow);
     }
-    DoLayoutNamePopup();
-    */
 
     // Settings
-    Zest::GlobalSettingsManager::Instance().DrawGUI("Settings");
+    if (showDebugSettings)
+    {
+        Zest::GlobalSettingsManager::Instance().DrawGUI("Settings", &showDebugSettings);
+    }
 
     // Profiler
     if (showProfiler)
@@ -312,7 +326,7 @@ void demo_draw()
 
 void demo_cleanup()
 {
-    layout_manager_save_layouts_file();
+    layout_manager_save();
 
     // Get the settings
     audio_destroy();
