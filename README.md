@@ -32,6 +32,14 @@ config.bat OR config.sh
 build.bat OR build.sh
 ```
 
+## Sound Font
+The included sound font is a small/simple/free general midi sound font from here (233 pop rock bank):
+https://www.zanderjaz.com/downloads/soundfonts/pianos/
+https://www.zanderjaz.com/soundfonts/pianos/233_poprockbank.sf2
+Installing a more powerful soundfont will produce a better result, such as this one:
+https://musical-artifacts.com/artifacts/1176
+You can change the font loaded in demo.cpp
+
 ## Libraries Used
 
 See prebuilt.bat for the full list

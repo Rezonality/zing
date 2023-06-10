@@ -123,8 +123,8 @@ void demo_load_gm_sound_font()
         auto& ctx = GetAudioContext();
 
         // Put a nicer/bigger soundfont here to hear a better rendition.
-        samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
-        //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
+        //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
+        samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
     });
 }
 
