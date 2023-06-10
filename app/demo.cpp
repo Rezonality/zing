@@ -37,6 +37,9 @@ bool showProfiler = true;
 bool showDebugSettings = false;
 bool showDemoWindow = false;
 
+std::future<void> fontLoaderFuture;
+std::future<std::shared_ptr<libremidi::reader>> midiReaderFuture;
+
 } //namespace
 
 // A simple command which uses the wave table to play a note with a phaser.
@@ -98,27 +101,31 @@ void demo_synth_note(float* pOut, uint32_t samples)
 
 auto demo_load_example_midi()
 {
-    auto midiFile = file_read(Zest::runtree_find_path("samples/midi/demo-1.mid"));
-    auto pReader = std::make_shared<libremidi::reader>();
-    auto midiRes = pReader->parse((uint8_t*)midiFile.c_str(), midiFile.size());
-    if (midiRes != reader::validated)
-    {
-        pReader.reset();
-    }
-    else
-    {
-        audio_calculate_midi_timings(pReader->tracks, pReader->ticksPerBeat);
-    }
-    return pReader;
+    midiReaderFuture = std::async([]() {
+        auto midiFile = file_read(Zest::runtree_find_path("samples/midi/demo-1.mid"));
+        auto pReader = std::make_shared<libremidi::reader>();
+        auto midiRes = pReader->parse((uint8_t*)midiFile.c_str(), midiFile.size());
+        if (midiRes != reader::validated)
+        {
+            pReader.reset();
+        }
+        else
+        {
+            audio_calculate_midi_timings(pReader->tracks, pReader->ticksPerBeat);
+        }
+        return pReader;
+    });
 }
 
 void demo_load_gm_sound_font()
 {
-    auto& ctx = GetAudioContext();
+    fontLoaderFuture = std::async([]() {
+        auto& ctx = GetAudioContext();
 
-    // Put a nicer/bigger soundfont here to hear a better rendition.
-    //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
-    samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
+        // Put a nicer/bigger soundfont here to hear a better rendition.
+        samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/LiveHQ.sf2"));
+        //samples_add(ctx.m_samples, "GM", Zest::runtree_find_path("samples/sf2/233_poprockbank.sf2"));
+    });
 }
 
 void demo_register_windows()
@@ -142,83 +149,54 @@ void demo_init()
 {
     auto& ctx = GetAudioContext();
 
+    // Lock the ticker to avoid loading conflicts (we unlock when fonts are loaded)
+    ctx.audioTickEnableMutex.lock();
+
     demo_register_windows();
 
     // Sound font contains a range of instruments, live sampled
     demo_load_gm_sound_font();
 
-    // An example midi track
-    auto pReader = demo_load_example_midi();
+    // Midi file example
+    demo_load_example_midi();
 
     demo_draw_midi_init();
 
     audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
-        static bool init = false;
-
-        if (!init)
-        {
-            if (pReader)
-            {
-                auto& ctx = GetAudioContext();
-                auto time = timer_to_ms(timer_get_elapsed(ctx.m_masterClock));
-                time += 2000.0;
-
-                // Queue the midi; just for the demo, reset the time to be 2 seconds in the future
-                for (const auto& track : pReader->tracks)
-                {
-                    for (const auto& msg : track)
-                    {
-                        auto m = msg.m;
-                        m.timestamp = m.timestamp + time;
-                        audio_add_midi_event(m);
-                    }
-                }
-            }
-            init = true;
-        }
-
+        // Do extra audio synth work here
         demo_synth_note((float*)pOutput, uint32_t(numSamples));
     });
-}
-
-void demo_show_analysis()
-{
-    PROFILE_SCOPE(demo_draw_analysis)
-    auto& audioContext = GetAudioContext();
-
-    size_t bufferWidth = 512;   // default width if no data
-    const auto Channels = audioContext.analysisChannels.size();
-    const auto BufferTypes = 2; // Spectrum + Audio
-    const auto BufferHeight = Channels * BufferTypes;
-
-    static AudioAnalysisData currentData;
-    for (int channel = 0; channel < Channels; channel++)
-    {
-        auto& analysis = audioContext.analysisChannels[channel];
-
-        std::shared_ptr<AudioAnalysisData> spNewData;
-        while (analysis->analysisData.try_dequeue(spNewData))
-        {
-            currentData = *spNewData;
-            analysis->analysisDataCache.enqueue(spNewData);
-        }
-
-        auto& spectrumBuckets = currentData.spectrumBuckets;
-        auto& audio = currentData.audio;
-
-        if (!spectrumBuckets.empty())
-        {
-            ImVec2 plotSize(300, 100);
-            ImGui::PlotLines(fmt::format("Spectrum: {}", audio_to_channel_name(channel)).c_str(), &spectrumBuckets[0], static_cast<int>(spectrumBuckets.size() / 2.5), 0, NULL, 0.0f, 1.0f, plotSize);
-            ImGui::PlotLines(fmt::format("Audio: {}", audio_to_channel_name(channel)).c_str(), &audio[0], static_cast<int>(audio.size()), 0, NULL, -1.0f, 1.0f, plotSize);
-        }
-    }
 }
 
 // Called outside of the the ImGui frame
 void demo_tick()
 {
+    auto& ctx = GetAudioContext();
+
     layout_manager_update();
+
+    if (is_future_ready(fontLoaderFuture) && is_future_ready(midiReaderFuture))
+    {
+        auto pReader = midiReaderFuture.get();
+        if (pReader)
+        {
+            auto& ctx = GetAudioContext();
+            auto time = timer_to_ms(timer_get_elapsed(ctx.m_masterClock));
+            time += 2000.0;
+
+            // Queue the midi; just for the demo, reset the time to be 2 seconds in the future
+            for (const auto& track : pReader->tracks)
+            {
+                for (const auto& msg : track)
+                {
+                    auto m = msg.m;
+                    m.timestamp = m.timestamp + time;
+                    audio_add_midi_event(m);
+                }
+            }
+        }
+        ctx.audioTickEnableMutex.unlock();
+    }
 }
 
 void demo_draw_menu()
@@ -307,7 +285,7 @@ void demo_draw()
             ImGui::EndDisabled();
 
             ImGui::SeparatorText("Analysis");
-            demo_show_analysis();
+            demo_draw_analysis();
         }
 
         ImGui::End();

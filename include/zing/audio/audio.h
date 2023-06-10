@@ -2,6 +2,8 @@
 
 #include <zing/pch.h>
 
+#include <zest/thread/thread_utils.h>
+
 #include <zing/audio/audio_analysis_settings.h>
 #include <zing/audio/audio_device_settings.h>
 #include <zing/audio/audio_samples.h>
@@ -62,6 +64,9 @@ struct ApiInfo
     std::map<uint32_t, std::vector<uint32_t>> inSampleRates;
 };
 
+constexpr uint32_t Channel_Out = 0;
+constexpr uint32_t Channel_In = 1;
+
 struct AudioChannelState
 {
     uint32_t frames = 0;
@@ -93,6 +98,8 @@ inline bool operator==(const SpectrumPartitionSettings& a, const SpectrumPartiti
     return ((a.limit == b.limit) && (a.n == b.n) && (a.sharpness == b.sharpness));
 }
 
+using ChannelId = std::pair<uint32_t, uint32_t>;
+
 struct AudioAnalysis
 {
     // FFT
@@ -103,7 +110,7 @@ struct AudioAnalysis
     std::vector<float> window;
 
     AudioChannelState channel;
-    uint32_t thisChannel;
+    ChannelId thisChannel;
 
     uint32_t outputSamples = 0; // The FFT output frames
 
@@ -127,9 +134,11 @@ struct AudioAnalysis
     // Bundles pending processing
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioBundle>> processBundles;
 
-
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioAnalysisData>> analysisData;
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioAnalysisData>> analysisDataCache;
+
+    // Current UI Cache; only used on the UI thread
+    std::shared_ptr<AudioAnalysisData> uiDataCache;
 };
 
 struct LinkData
@@ -160,7 +169,7 @@ struct AudioContext
 
     // Audio analysis information. Processed outside of audio thread, consumed in UI,
     // so use system mutex, we don't need to spin
-    std::vector<std::shared_ptr<AudioAnalysis>> analysisChannels;
+    std::map<ChannelId, std::shared_ptr<AudioAnalysis>> analysisChannels;
     AudioAnalysisSettings audioAnalysisSettings;
 
     std::atomic<uint64_t> analysisWriteGeneration = 0;
@@ -214,6 +223,8 @@ struct AudioContext
 
     // Clients
     std::vector<fnMidiBroadcast> midiClients;
+
+    Zest::spin_mutex audioTickEnableMutex;
 };
 
 AudioContext& GetAudioContext();
@@ -227,7 +238,9 @@ void audio_show_settings_gui();
 std::shared_ptr<AudioBundle> audio_get_bundle();
 void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle);
 
-std::string audio_to_channel_name(uint32_t channel);
+std::string audio_to_channel_name(ChannelId Id);
+ChannelId audio_to_channel_id(uint32_t type, uint32_t channel);
+
 void audio_add_midi_event(const libremidi::message& msg);
 
 void audio_calculate_midi_timings(std::vector<libremidi::midi_track>& track, float ticksPerBeat);

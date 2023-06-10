@@ -38,10 +38,12 @@ inline std::vector<float> audio_analysis_create_window(uint32_t size)
     return ret;
 }
 
+/*
 inline glm::uvec4 Div(const glm::uvec4& val, uint32_t div)
 {
     return glm::uvec4(val.x / div, val.y / div, val.z / div, val.w / div);
 }
+*/
 
 } // namespace
 
@@ -50,14 +52,22 @@ void audio_analysis_create_all()
     auto& ctx = Zing::GetAudioContext();
 
     // Initialize the analysis
+    for (uint32_t channel = 0; channel < ctx.inputState.channelCount; channel++)
+    {
+        auto pAnalysis = std::make_shared<AudioAnalysis>();
+        auto id = audio_to_channel_id(Channel_In, channel);
+        ctx.analysisChannels[id] = pAnalysis;
+        pAnalysis->thisChannel = id;
+        audio_analysis_start(*pAnalysis, ctx.inputState);
+    }
+
     for (uint32_t channel = 0; channel < ctx.outputState.channelCount; channel++)
     {
-        if (ctx.analysisChannels.size() <= channel)
-        {
-            ctx.analysisChannels.push_back(std::make_shared<AudioAnalysis>());
-            ctx.analysisChannels[channel]->thisChannel = channel;
-            audio_analysis_start(*ctx.analysisChannels[channel], ctx.outputState);
-        }
+        auto pAnalysis = std::make_shared<AudioAnalysis>();
+        auto id = audio_to_channel_id(Channel_Out, channel);
+        ctx.analysisChannels[id] = pAnalysis;
+        pAnalysis->thisChannel = id;
+        audio_analysis_start(*pAnalysis, ctx.inputState);
     }
 }
 
@@ -65,7 +75,7 @@ void audio_analysis_destroy_all()
 {
     auto& ctx = Zing::GetAudioContext();
 
-    for (auto& analysis : ctx.analysisChannels)
+    for (auto& [name, analysis] : ctx.analysisChannels)
     {
         audio_analysis_stop(*analysis);
         if (analysis->cfg)
@@ -85,7 +95,10 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
     // Kick off the thread
     auto pAnalysis = &analysis;
 
-    // 2 spare cache buffers
+    // 3 spare cache buffers
+    // 1 is held by the UI most of the time as the 'last good'
+    // 1 for current processing, and 1 in the pipe
+    pAnalysis->analysisDataCache.enqueue(std::make_shared<AudioAnalysisData>());
     pAnalysis->analysisDataCache.enqueue(std::make_shared<AudioAnalysisData>());
     pAnalysis->analysisDataCache.enqueue(std::make_shared<AudioAnalysisData>());
 
@@ -93,7 +106,7 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
     analysis.exited = false;
     analysis.quitThread = false;
     analysis.analysisThread = std::move(std::thread([=]() {
-        const auto wakeUpDelta = std::chrono::milliseconds(10);
+        const auto wakeUpDelta = std::chrono::milliseconds(1);
         for (;;)
         {
             // First check for quit
@@ -106,7 +119,7 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
             if (!pAnalysis->processBundles.try_dequeue(spData))
             {
 #ifdef DEBUG
-                Zest::Profiler::NameThread(fmt::format("Analysis: {}", pAnalysis->thisChannel == 0 ? "L" : "R").c_str());
+                Zest::Profiler::NameThread(fmt::format("Analysis: {}", audio_to_channel_name(pAnalysis->thisChannel)).c_str());
 #endif
                 // Sleep
                 std::this_thread::sleep_for(wakeUpDelta);
@@ -174,7 +187,7 @@ void audio_analysis_update(AudioAnalysis& analysis, AudioBundle& bundle)
     {
         return;
     }
-    
+
     auto& analysisData = *spAnalysisData;
     if (analysisData.audio.empty())
     {
@@ -476,7 +489,7 @@ void audio_analysis_calculate_spectrum_bands(AudioAnalysis& analysis, AudioAnaly
 
     // Calculate frequency per FFT sample
     auto frequencyPerBucket = float(analysis.channel.sampleRate) / float(analysisData.spectrumBuckets.size());
-    auto spectrumOffsets = Div(ctx.audioAnalysisSettings.spectrumFrequencies, (int)frequencyPerBucket) + glm::uvec4(1, 1, 1, 0);
+    auto spectrumOffsets = (ctx.audioAnalysisSettings.spectrumFrequencies / (uint32_t)frequencyPerBucket) + glm::uvec4(1, 1, 1, 0);
 
     for (uint32_t sample = 0; sample < analysisData.spectrumBuckets.size(); sample++)
     {
@@ -532,7 +545,7 @@ void audio_analysis_gen_log_space(AudioAnalysis& analysis, uint32_t limit, uint3
     uint32_t lastValue = 0;
     for (float fVal = 0.0f; fVal <= 1.0f; fVal += 1.0f / float(n))
     {
-        auto step = uint32_t(limit * std::pow(fVal,  ctx.audioAnalysisSettings.spectrumSharpness));
+        auto step = uint32_t(limit * std::pow(fVal, ctx.audioAnalysisSettings.spectrumSharpness));
         step = std::max(step, lastValue + 1);
         lastValue = step;
         analysis.spectrumPartitions.push_back(float(step));

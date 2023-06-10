@@ -49,7 +49,10 @@ bool samples_add(AudioSamples& audioSamples, Zest::StringId id, const fs::path& 
 void samples_update_rate(AudioSamples& audioSamples)
 {
     auto& ctx = GetAudioContext();
-    assert(ctx.outputState.channelCount == 1 || ctx.outputState.channelCount == 2);
+    if (ctx.outputState.channelCount == 0)
+    {
+        return;
+    }
 
     for (auto& [id, container] : audioSamples.samples)
     {
@@ -78,6 +81,10 @@ void samples_stop(AudioSamples& audioSamples)
 void samples_render(AudioSamples& audioSamples, float* pOutput, uint32_t numSamples)
 {
     auto& ctx = GetAudioContext();
+    if (ctx.outputState.channelCount == 0 || pOutput == nullptr || numSamples == 0)
+    {
+        return;
+    }
     for (auto& [id, container] : audioSamples.samples)
     {
         if (container.soundFont)

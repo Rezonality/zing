@@ -67,6 +67,7 @@ std::shared_ptr<AudioBundle> audio_get_bundle()
 
 void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle)
 {
+    //std::fill(pBundle->data.begin(), pBundle->data.end(), 0.0f);
     audioContext.spareBundles.enqueue(pBundle);
 }
 
@@ -320,48 +321,49 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
         return 0;
     }
 
-    if (ctx.m_totalFrames == 0)
-    {
-        ctx.m_frameInitTime = ctx.m_link.clock().micros();
-        ctx.m_frameCurrentTime = ctx.m_frameInitTime;
-    }
-
-    ctx.threadId = std::this_thread::get_id();
-    ctx.inputState.frames = nBufferFrames;
-    ctx.outputState.frames = nBufferFrames;
-
-    double deltaTime = 1.0f / (double)ctx.outputState.sampleRate;
-    const double sampleRate = static_cast<double>(ctx.outputState.sampleRate);
-    const auto bufferDuration = duration_cast<microseconds>(duration<double>{nBufferFrames / sampleRate});
-
-    // Link
-    auto hostTimeAtFrame = ctx.m_hostTimeFilter.sampleTimeToHostTime(double(ctx.m_totalFrames));
-    ctx.m_totalFrames += nBufferFrames;
-    const auto bufferBeginAtOutput = hostTimeAtFrame + ctx.m_outputLatency.load();
-    // Link
-
-    auto samples = (float*)outputBuffer;
-
-    // Ensure TP has same tempo
-    // TimeProvider::Instance().SetTempo(sessionState.tempo(), 4.0);
-
-    audio_pre_callback(hostTimeAtFrame, outputBuffer, nBufferFrames);
-
-    audio_process_midi(outputBuffer, nBufferFrames);
-
-    auto sendAnalysis = [&](auto& state, const float* pBuffer, uint32_t frames) {
-        for (uint32_t i = 0; i < state.channelCount; i++)
+    auto bLocked = spin_mutex_try(ctx.audioTickEnableMutex, [&]() {
+        if (ctx.m_totalFrames == 0)
         {
-            if (ctx.analysisChannels.size() > i)
+            ctx.m_frameInitTime = ctx.m_link.clock().micros();
+            ctx.m_frameCurrentTime = ctx.m_frameInitTime;
+        }
+
+        ctx.threadId = std::this_thread::get_id();
+        ctx.inputState.frames = nBufferFrames;
+        ctx.outputState.frames = nBufferFrames;
+
+        double deltaTime = 1.0f / (double)ctx.outputState.sampleRate;
+        const double sampleRate = static_cast<double>(ctx.outputState.sampleRate);
+        const auto bufferDuration = duration_cast<microseconds>(duration<double>{nBufferFrames / sampleRate});
+
+        // Link
+        auto hostTimeAtFrame = ctx.m_hostTimeFilter.sampleTimeToHostTime(double(ctx.m_totalFrames));
+        ctx.m_totalFrames += nBufferFrames;
+        const auto bufferBeginAtOutput = hostTimeAtFrame + ctx.m_outputLatency.load();
+        // Link
+
+        auto samples = (float*)outputBuffer;
+
+        // Ensure TP has same tempo
+        // TimeProvider::Instance().SetTempo(sessionState.tempo(), 4.0);
+
+        audio_pre_callback(hostTimeAtFrame, outputBuffer, nBufferFrames);
+
+        audio_process_midi(outputBuffer, nBufferFrames);
+
+        auto sendAnalysis = [&](auto& state, const float* pBuffer, uint32_t frames, const ChannelId& Id) {
+            PROFILE_SCOPE(SendAnalysis);
+            auto itrAnalysis = ctx.analysisChannels.find(Id);
+            if (itrAnalysis != ctx.analysisChannels.end())
             {
                 // Copy the audio data into a processing bundle and add it to the queue
                 auto pBundle = audio_get_bundle();
                 pBundle->data.resize(nBufferFrames);
-                pBundle->channel = i;
+                pBundle->channel = Id.second;
 
                 // Copy with stride
                 auto stride = state.channelCount;
-                auto pSource = pBuffer + i;
+                auto pSource = pBuffer + Id.second;
                 for (uint32_t count = 0; count < frames; count++)
                 {
                     pBundle->data[count] = *pSource;
@@ -369,34 +371,48 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 }
 
                 // Forward the bundle to the processor
-                ctx.analysisChannels[i]->processBundles.enqueue(pBundle);
+                itrAnalysis->second->processBundles.enqueue(pBundle);
             }
-        }
-    };
+        };
 
-    if (ctx.m_isPlaying)
-    {
-        if (outputBuffer)
+        if (ctx.m_isPlaying)
         {
-            if (ctx.m_fnCallback)
+            if (inputBuffer)
             {
-                ctx.m_fnCallback(bufferBeginAtOutput, outputBuffer, nBufferFrames);
+                for (uint32_t i = 0; i < ctx.inputState.channelCount; i++)
+                {
+                    sendAnalysis(ctx.inputState, (const float*)inputBuffer, nBufferFrames, audio_to_channel_id(Channel_In, i));
+                }
             }
-            sendAnalysis(ctx.outputState, (const float*)outputBuffer, nBufferFrames);
+
+            if (outputBuffer)
+            {
+                if (ctx.m_fnCallback)
+                {
+                    ctx.m_fnCallback(bufferBeginAtOutput, outputBuffer, nBufferFrames);
+                }
+
+                for (uint32_t i = 0; i < ctx.outputState.channelCount; i++)
+                {
+                    sendAnalysis(ctx.outputState, (const float*)outputBuffer, nBufferFrames, audio_to_channel_id(Channel_Out, i));
+                }
+            }
+        }
+
+        ctx.inputState.totalFrames += nBufferFrames;
+        ctx.outputState.totalFrames += nBufferFrames;
+
+        ctx.m_frameCurrentTime += bufferDuration;
+    }); // End of try
+
+    if (!bLocked)
+    {
+        // Fill with 0
+        if (ctx.outputState.channelCount > 0)
+        {
+            memset(outputBuffer, 0, nBufferFrames * sizeof(float) * ctx.outputState.channelCount);
         }
     }
-
-    /*
-    if (inputBuffer)
-    {
-        sendAnalysis(ctx.inputState, (const float*)inputBuffer, nBufferFrames);
-    }
-    */
-
-    ctx.inputState.totalFrames += nBufferFrames;
-    ctx.outputState.totalFrames += nBufferFrames;
-
-    ctx.m_frameCurrentTime += bufferDuration;
 
     return 0;
 }
@@ -1179,20 +1195,14 @@ void audio_show_settings_gui()
     }
 }
 
-std::string audio_to_channel_name(uint32_t channel)
+std::string audio_to_channel_name(ChannelId id)
 {
-    if (channel == 0)
-    {
-        return "L";
-    }
-    else if (channel == 1)
-    {
-        return "R";
-    }
-    else
-    {
-        return fmt::format("Ch:{}", channel);
-    }
+    return fmt::format("{}:{}", id.first == Channel_In ? "I" : (id.first == Channel_Out ? "O" : std::to_string(id.first)), id.second == 0 ? "L" : (id.second == 1 ? "R" : std::to_string(id.second)));
+}
+
+ChannelId audio_to_channel_id(uint32_t channel_type, uint32_t channel)
+{
+    return ChannelId(channel_type, channel);
 }
 
 void audio_add_midi_event(const libremidi::message& msg)

@@ -17,6 +17,7 @@ struct SampleContainer
 
 struct AudioSamples
 {
+    std::mutex sampleMutex;
     std::unordered_map<Zest::StringId, SampleContainer> samples;
     std::unordered_map<Zest::StringId, Zest::StringId> presetSamples;
 };

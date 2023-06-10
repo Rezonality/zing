@@ -16,6 +16,7 @@ set(ZING_APP_SOURCE
     ${APP_ROOT}/main.cpp
     ${APP_ROOT}/demo.cpp
     ${APP_ROOT}/demo_draw_midi.cpp
+    ${APP_ROOT}/demo_draw_analysis.cpp
     ${APP_ROOT}/demo.h
     ${APP_ROOT}/CMakeLists.txt
     )
