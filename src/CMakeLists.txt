@@ -4,7 +4,6 @@ project(Zing
 )
 
 find_package(glm CONFIG REQUIRED)
-find_package(Vulkan REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
 find_package(date CONFIG REQUIRED)
@@ -66,7 +65,6 @@ set(ZING_SOURCE
     ${ZING_ROOT}/project.natvis
 )
 
-SET(ZEST_DIR ${ZING_ROOT}/libs/zing)
 SET(SOUNDPIPE_DIR ${ZING_ROOT}/libs/soundpipe)
 SET(SOUNDPIPE_DIR ${ZING_ROOT}/libs/soundpipe)
 SET(SOUNDPIPE_EXTENSIONS_DIR ${ZING_ROOT}/libs/soundpipe_extensions)
@@ -108,8 +106,6 @@ list(APPEND TEST_SOURCES
 add_library(Zing STATIC ${ZING_SOURCE})
 add_library(Zing::Zing ALIAS Zing)
 
-include_directories(${ZEST_DIR}/libs ${ZEST_DIR}/include)
-
 target_compile_definitions(Zing
     PUBLIC
     NO_LIBSNDFILE
@@ -124,18 +120,10 @@ target_compile_definitions(Zing
 endif()
 
 target_link_libraries(Zing
-PRIVATE
-    tomlplusplus::tomlplusplus
 PUBLIC
     Zest::Zest
-    unofficial::concurrentqueue::concurrentqueue
-    fmt::fmt
-    glm::glm
-    Vulkan::Vulkan
-    portaudio_static
-    imgui::imgui
-    date::date
-    date::date-tz)
+PRIVATE
+    portaudio_static)
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
     target_link_libraries(Zing PUBLIC atomic)
@@ -153,6 +141,8 @@ PRIVATE
 PUBLIC
     $<BUILD_INTERFACE:${ZING_ROOT}/libs/remidi/include>
     $<BUILD_INTERFACE:${ZING_ROOT}/libs>
+    $<BUILD_INTERFACE:${ZING_ROOT}/include>
+    $<BUILD_INTERFACE:${ZING_ROOT}/tomlplusplus/include>
     $<BUILD_INTERFACE:${ABLETON_LINK_INCLUDE_DIRS}>
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/h>
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/dr_wav>
@@ -163,32 +153,6 @@ PUBLIC
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/spa>
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/h>
     $<BUILD_INTERFACE:${SOUNDPIPE_EXTENSIONS_DIR}>
-    $<BUILD_INTERFACE:${ZING_ROOT}/include>
-    $<BUILD_INTERFACE:${ZING_ROOT}/tomlplusplus/include>
-    $<BUILD_INTERFACE:${ZEST_DIR}/libs>
-    $<BUILD_INTERFACE:${ZEST_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-)
-
-# Set locations for components
-set_target_properties(Zing PROPERTIES
-    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
-    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
-)
-
-# Install the binary
-install(TARGETS Zing
-    EXPORT zing-targets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    INCLUDES DESTINATION ${LIBLEGACY_INCLUDE_DIRS}
-)
-
-# Install the include files
-install(DIRECTORY ${ZING_ROOT}/include/zing
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
 )
 
 source_group ("zing/audio" FILES ${ZING_AUDIO_SOURCE})

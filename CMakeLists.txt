@@ -6,7 +6,7 @@ option(BUILD_TESTS "Build Tests" ON)
 option(ZING_LIBRARY_ONLY "Only build library" OFF)
 
 # Global Settings
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
@@ -29,19 +29,15 @@ include(cmake/utils.cmake)
 find_package(unofficial-concurrentqueue CONFIG REQUIRED)
 find_package(SDL2 REQUIRED)
 find_package(fmt REQUIRED)
-find_package(freetype CONFIG REQUIRED)
-find_package(imgui REQUIRED)
 find_package(portaudio CONFIG REQUIRED)
 
 set(ZING_ROOT ${CMAKE_CURRENT_LIST_DIR})
 set(M3RDPARTY_DIR ${CMAKE_CURRENT_LIST_DIR}/m3rdparty)
-set(ZING_INCLUDE_DIR include/)
 
+set(ZING_INCLUDE_DIR include/)
 set(ZEST_BUILD_TESTS off)
 
 configure_file(${CMAKE_CURRENT_LIST_DIR}/cmake/config_zing_app.h.cmake ${CMAKE_BINARY_DIR}/config_zing_app.h)
-
-include(GNUInstallDirs)
 
 enable_testing()
 
@@ -54,32 +50,4 @@ if (NOT ${ZING_LIBRARY_ONLY})
 add_subdirectory(app)
 add_subdirectory(tests)
 endif()
-
-# Make the CMake bits that ensure find_package does the right thing
-install(EXPORT zing-targets
-    FILE zing-targets.cmake
-    NAMESPACE zing::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/zing
-)
-
-include(CMakePackageConfigHelpers)
-
-configure_package_config_file(
-    ${ZING_ROOT}/cmake/zing-config.cmake.in
-    ${CMAKE_BINARY_DIR}/cmake/zing-config.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/zing
-)
-
-write_basic_package_version_file(
-    ${CMAKE_BINARY_DIR}/cmake/zing-config-version.cmake
-    VERSION 1.0
-    COMPATIBILITY AnyNewerVersion
-)
-
-install(
-    FILES
-        ${CMAKE_BINARY_DIR}/cmake/zing-config.cmake
-        ${CMAKE_BINARY_DIR}/cmake/zing-config-version.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/zing
-)
 

@@ -12,6 +12,8 @@ set(APP_ROOT ${CMAKE_CURRENT_LIST_DIR})
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_LIST_DIR}/cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/demo_common.cmake)
 
+find_package(Vulkan REQUIRED)
+
 set(ZING_APP_SOURCE
     ${APP_ROOT}/main.cpp
     ${APP_ROOT}/demo.cpp
@@ -37,9 +39,9 @@ target_include_directories(${APP_NAME}
     )
 
 target_link_libraries (${APP_NAME}
-    PRIVATE
+PRIVATE
     Zing::Zing
-    SDL2::SDL2main
+    Vulkan::Vulkan
     ${PLATFORM_LINKLIBS}
     )
 

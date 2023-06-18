@@ -15,8 +15,8 @@
 #include <tsf/tsf.h>
 #include <libremidi/message.hpp>
 #include <concurrentqueue/concurrentqueue.h>
-#include <zest/common.h>
 
+#include <zest/common.h>
 #include <zest/logger/logger.h>
 #include <zest/memory/memory.h>
 #include <zest/time/profiler.h>
