@@ -6,7 +6,6 @@ project(Zing
 find_package(glm CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
-find_package(date CONFIG REQUIRED)
 find_path(ABLETON_LINK_INCLUDE_DIRS "ableton/Link.hpp")
 
 set(ZING_SF2_SOURCE
