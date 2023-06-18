@@ -58,26 +58,6 @@ if (WIN32)
     copy_existing_files(${PROJECT_NAME} "${RESOURCE_DEPLOY_FILES}" ${CMAKE_CURRENT_BINARY_DIR}/$(Configuration) )
 endif()
 
-if (APPLE)
-    install(TARGETS ${DEMO_NAME}
-        EXPORT zing-targets
-        COMPONENT binaries
-        BUNDLE DESTINATION . COMPONENT Runtime
-        RUNTIME DESTINATION bin COMPONENT Runtime
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        INCLUDES DESTINATION ${LIBLEGACY_INCLUDE_DIRS})
-else()
-    install(TARGETS ${DEMO_NAME}
-        EXPORT zing-targets
-        COMPONENT binaries
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/imgui
-        INCLUDES DESTINATION ${LIBLEGACY_INCLUDE_DIRS}
-        )
-endif()
-
 source_group ("Source" FILES ${ZING_APP_SOURCE})
 source_group ("SoundPipe" FILES ${SOUNDPIPE_SOURCE})
 
