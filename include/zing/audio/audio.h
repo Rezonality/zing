@@ -98,6 +98,7 @@ inline bool operator==(const SpectrumPartitionSettings& a, const SpectrumPartiti
     return ((a.limit == b.limit) && (a.n == b.n) && (a.sharpness == b.sharpness));
 }
 
+// Channel_In/Out/?, count
 using ChannelId = std::pair<uint32_t, uint32_t>;
 
 struct AudioAnalysis

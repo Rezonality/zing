@@ -1,5 +1,6 @@
 #include <zing/pch.h>
 #include <zest/file/file.h>
+#include <zest/logger/logger.h>
 
 #include <libremidi/libremidi.hpp>
 #include <libremidi/reader.hpp>
