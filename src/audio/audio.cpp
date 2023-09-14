@@ -669,6 +669,9 @@ void audio_destroy()
 {
     auto& ctx = audioContext;
 
+    // Unlock the audio, since we are fully loaded now.
+    ctx.audioTickEnableMutex.lock();
+
     // Stop the analysis
     audio_analysis_destroy_all();
 
@@ -686,6 +689,8 @@ void audio_destroy()
         sp_destroy(&ctx.pSP);
         ctx.pSP = nullptr;
     }
+    
+    ctx.audioTickEnableMutex.unlock();
 }
 
 void audio_add_settings_hooks()
