@@ -195,6 +195,8 @@ void demo_tick()
                 }
             }
         }
+
+        // Unlock the audio, since we are fully loaded now.
         ctx.audioTickEnableMutex.unlock();
     }
 }
