@@ -103,8 +103,7 @@ jobs:
           name: binaries
           path: |
             ${{github.workspace}}/build/app/**/*.ttf
-            ${{github.workspace}}/build/app/**/*.pdb
             ${{github.workspace}}/build/app/**/*.scm
             ${{github.workspace}}/build/app/**/Zing*
-            ${{github.workspace}}/build/tests/**/unittests
+            ${{github.workspace}}/build/tests/**/unittests/*.exe
 
