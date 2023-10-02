@@ -5,7 +5,6 @@ project(Zing
 
 find_package(glm CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
-find_package(tomlplusplus CONFIG REQUIRED)
 find_path(ABLETON_LINK_INCLUDE_DIRS "ableton/Link.hpp")
 
 set(ZING_SF2_SOURCE
@@ -141,7 +140,6 @@ PUBLIC
     $<BUILD_INTERFACE:${ZING_ROOT}/libs/remidi/include>
     $<BUILD_INTERFACE:${ZING_ROOT}/libs>
     $<BUILD_INTERFACE:${ZING_ROOT}/include>
-    $<BUILD_INTERFACE:${ZING_ROOT}/tomlplusplus/include>
     $<BUILD_INTERFACE:${ABLETON_LINK_INCLUDE_DIRS}>
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/h>
     $<BUILD_INTERFACE:${SOUNDPIPE_DIR}/lib/dr_wav>
