@@ -1,5 +1,3 @@
-find_package(SDL2 REQUIRED)
-
 macro(add_project_meta FILES_TO_INCLUDE)
 if (NOT RESOURCE_FOLDER)
     set(RESOURCE_FOLDER ${CMAKE_CURRENT_BINARY_DIR}/../res)

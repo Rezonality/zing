@@ -27,7 +27,7 @@ set(RESOURCE_FOLDER ${CMAKE_CURRENT_LIST_DIR}/res)
 add_project_meta(META_FILES_TO_INCLUDE)
 
 add_executable (${APP_NAME}
-    ${OS_BUNDLE}
+    #${OS_BUNDLE}
     ${ZING_APP_SOURCE}
     ${META_FILES_TO_INCLUDE}
     )
