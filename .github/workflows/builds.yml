@@ -31,11 +31,11 @@ jobs:
         submodules: recursive
 
     - name: Install Vulkan SDK
-      uses: humbletim/setup-vulkan-sdk@v1.2.0
+      uses: humbletim/setup-vulkan-sdk@v1.2.1
       with:
         vulkan-query-version: 1.3.204.0
         vulkan-components: Vulkan-Headers, Vulkan-Loader
-        vulkan-use-cache: true
+        vulkan-use-cache: false
 
     - name: Mac pkg-config
       run: |
@@ -89,16 +89,17 @@ jobs:
         bash <(curl -Ls https://coverage.codacy.com/get.sh) report -r coverage.info
 
     - name: Archive Coverage HTML
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       if: matrix.build_type == 'Coverage'
       with:
           name: coverage-html
           path: |
             ${{github.workspace}}/build/**/*.html
             ${{github.workspace}}/build/**/*.css
+          if-no-files-found: warn
 
     - name: Archive Binary
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
           name: binaries
           path: |
@@ -106,4 +107,5 @@ jobs:
             ${{github.workspace}}/build/app/**/*.scm
             ${{github.workspace}}/build/app/**/Zing*
             ${{github.workspace}}/build/tests/**/unittests/*.exe
+          if-no-files-found: warn
 

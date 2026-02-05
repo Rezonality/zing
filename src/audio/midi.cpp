@@ -11,6 +11,7 @@ namespace Zing
 
 bool midi_load(const fs::path& path)
 {
+    /*
     auto bytes = Zest::file_read(path);
 
     // Initialize our reader object
@@ -199,20 +200,22 @@ bool midi_load(const fs::path& path)
             }
         }
     }
+    */
     return true;
 }
 
 void midi_probe()
 {
+    /*
     try
     {
         // Create an api map.
         std::map<libremidi::API, std::string> apiMap{
-            {libremidi::API::MACOSX_CORE, "OS-X CoreMidi"},
+            //{libremidi::API::MACOSX_CORE, "OS-X CoreMidi"},
             {libremidi::API::WINDOWS_MM, "Windows MultiMedia"},
-            {libremidi::API::UNIX_JACK, "Jack Client"},
-            {libremidi::API::LINUX_ALSA_SEQ, "Linux ALSA (sequencer)"},
-            {libremidi::API::LINUX_ALSA_RAW, "Linux ALSA (raw)"},
+            //{libremidi::API::UNIX_JACK, "Jack Client"},
+            //{libremidi::API::LINUX_ALSA_SEQ, "Linux ALSA (sequencer)"},
+            //{libremidi::API::LINUX_ALSA_RAW, "Linux ALSA (raw)"},
             {libremidi::API::DUMMY, "Dummy (no driver)"},
         };
 
@@ -260,6 +263,7 @@ void midi_probe()
         UNUSED(error);
         LOG(ERR, error.what());
     }
+    */
 }
 
 } //namespace Zing

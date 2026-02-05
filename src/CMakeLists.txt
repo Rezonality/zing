@@ -5,6 +5,7 @@ project(Zing
 
 find_package(glm CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
+find_package(tinyfiledialogs CONFIG REQUIRED)
 find_path(ABLETON_LINK_INCLUDE_DIRS "ableton/Link.hpp")
 
 set(ZING_SF2_SOURCE
@@ -40,6 +41,8 @@ set(ZING_AUDIO_SOURCE
     ${ZING_ROOT}/src/audio/audio.cpp
     ${ZING_ROOT}/src/audio/audio_analysis.cpp
     ${ZING_ROOT}/src/audio/audio_samples.cpp
+    ${ZING_ROOT}/src/audio/waterfall.cpp
+    ${ZING_ROOT}/src/audio/draw_waterfall.cpp
     ${ZING_ROOT}/src/audio/midi.cpp
 
     # Audio
@@ -47,6 +50,7 @@ set(ZING_AUDIO_SOURCE
     ${ZING_ROOT}/include/zing/audio/audio_samples.h
     ${ZING_ROOT}/include/zing/audio/audio_analysis_settings.h
     ${ZING_ROOT}/include/zing/audio/audio_device_settings.h
+    ${ZING_ROOT}/include/zing/audio/waterfall.h
     ${ZING_ROOT}/include/zing/audio/midi.h
 )
 
@@ -106,6 +110,7 @@ add_library(Zing::Zing ALIAS Zing)
 
 target_compile_definitions(Zing
     PUBLIC
+    DONT_USE_LINK
     NO_LIBSNDFILE
     _SILENCE_EXPERIMENTAL_FILESYSTEM_DEPRECATION_WARNING)
 
@@ -121,7 +126,9 @@ target_link_libraries(Zing
 PUBLIC
     Zest::Zest
 PRIVATE
-    portaudio_static)
+    portaudio_static
+    tinyfiledialogs::tinyfiledialogs
+)
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
     target_link_libraries(Zing PUBLIC atomic)

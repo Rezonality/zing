@@ -8,6 +8,8 @@
 #include <zing/audio/audio_device_settings.h>
 #include <zing/audio/audio_samples.h>
 
+#include <libremidi/libremidi.hpp>
+
 extern "C" {
 #include <soundpipe/h/soundpipe.h>
 }
@@ -20,20 +22,25 @@ struct tsf;
 #else
 #define LINK_PLATFORM_LINUX
 #endif
+#include <ableton/Link.hpp>
 #include <ableton/link/HostTimeFilter.hpp>
 #include <ableton/platforms/Config.hpp>
-#include <ableton/Link.hpp>
 
-#include <kiss_fft.h>
+#include <kiss_fftr.h>
 
 union SDL_Event;
 
 namespace Zing
 {
 
+// Channel_In/Out/?, count
+using ChannelId = std::pair<uint32_t, uint32_t>;
+constexpr uint32_t Channel_Out = 0;
+constexpr uint32_t Channel_In = 1;
+
 struct AudioBundle
 {
-    uint32_t channel;
+    ChannelId channel;
     std::vector<float> data;
 };
 
@@ -43,7 +50,7 @@ struct AudioSettings
     std::atomic<bool> enableMidi = true;
 };
 
-using AudioCB = std::function<void(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)>;
+using AudioCB = std::function<void(const std::chrono::microseconds hostTime, const void* pInput, void* pOutput, uint32_t frameCount)>;
 
 struct ApiInfo
 {
@@ -63,9 +70,6 @@ struct ApiInfo
     std::vector<std::string> inDeviceNames;
     std::map<uint32_t, std::vector<uint32_t>> inSampleRates;
 };
-
-constexpr uint32_t Channel_Out = 0;
-constexpr uint32_t Channel_In = 1;
 
 struct AudioChannelState
 {
@@ -90,12 +94,11 @@ struct SpectrumPartitionSettings
 {
     uint32_t limit = 0;
     uint32_t n = 0;
-    float sharpness = 1.0f;
 };
 
 inline bool operator==(const SpectrumPartitionSettings& a, const SpectrumPartitionSettings& b)
 {
-    return ((a.limit == b.limit) && (a.n == b.n) && (a.sharpness == b.sharpness));
+    return ((a.limit == b.limit) && (a.n == b.n));
 }
 
 // Channel_In/Out/?, count
@@ -104,14 +107,18 @@ using ChannelId = std::pair<uint32_t, uint32_t>;
 struct AudioAnalysis
 {
     // FFT
-    kiss_fft_cfg cfg;
-    std::vector<std::complex<float>> fftIn;
-    std::vector<std::complex<float>> fftOut;
+    kiss_fftr_cfg cfg;
+    std::vector<kiss_fft_scalar> fftIn;
+    std::vector<kiss_fft_cpx> fftOut;
     std::vector<float> fftMag;
     std::vector<float> window;
 
     AudioChannelState channel;
     ChannelId thisChannel;
+
+    std::vector<float> inputCache;
+    uint32_t maxInputSize = 48000 * 10;
+    fs::path inputDumpPath;
 
     uint32_t outputSamples = 0; // The FFT output frames
 
@@ -130,7 +137,7 @@ struct AudioAnalysis
 
     std::vector<float> spectrumPartitions;
     SpectrumPartitionSettings lastSpectrumPartitions;
-    bool logPartitions = true;
+    std::vector<float> spectrumBucketsEma;
 
     // Bundles pending processing
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioBundle>> processBundles;
@@ -142,6 +149,9 @@ struct AudioAnalysis
     std::shared_ptr<AudioAnalysisData> uiDataCache;
 };
 
+using fnMidiBroadcast = std::function<void(const libremidi::message&)>;
+
+#ifdef USE_LINK
 struct LinkData
 {
     double requestedTempo = 60.0;
@@ -150,8 +160,7 @@ struct LinkData
     double quantum = 4.0;
     bool startStopSyncOn = true;
 };
-
-using fnMidiBroadcast = std::function<void(const libremidi::message&)>;
+#endif
 
 struct AudioContext
 {
@@ -190,17 +199,19 @@ struct AudioContext
     PaStreamParameters m_inputParams;
     PaStreamParameters m_outputParams;
     PaStream* m_pStream = nullptr;
-    
+
     // Bundles of audio data passed out of the audio thread to analysis
     moodycamel::ConcurrentQueue<std::shared_ptr<AudioBundle>> spareBundles;
 
-    // Link
+    #ifdef USE_LINK
     std::atomic<std::chrono::microseconds> m_outputLatency;
     ableton::link::HostTimeFilter<ableton::link::platform::Clock> m_hostTimeFilter;
     std::mutex m_linkDataGuard;
     LinkData m_linkData;
     LinkData m_lockFreeLinkData;
     ableton::Link m_link = ableton::Link(20.0);
+    #endif
+
     bool m_clicking = false;
     double m_clickFrequency;
     double m_clickTime = 0.0;
@@ -211,8 +222,8 @@ struct AudioContext
     // Total frames of audio sent, since start
     // These on the audio thread.
     uint64_t m_totalFrames = 0;
-    std::chrono::microseconds m_frameInitTime;      // Start time for when we begin sending audio frames
-    std::chrono::microseconds m_frameCurrentTime;   // Current time of audio frame
+    std::chrono::microseconds m_frameInitTime;    // Start time for when we begin sending audio frames
+    std::chrono::microseconds m_frameCurrentTime; // Current time of audio frame
 
     AudioSamples m_samples;
 
@@ -226,6 +237,16 @@ struct AudioContext
     std::vector<fnMidiBroadcast> midiClients;
 
     Zest::spin_mutex audioTickEnableMutex;
+
+    std::vector<float> inputStreamOverride;
+    uint32_t inputStreamIndex = 0;
+
+    std::atomic<float> radioAgcPower = 0.0f;
+    std::atomic<float> radioAgcPowerOut = 0.0f;
+    std::atomic<float> radioOutAgcPower = 0.0f;
+    std::atomic<float> radioOutAgcPowerOut = 0.0f;
+    std::atomic<float> radioCompPower = 0.0f;
+    std::atomic<float> radioCompPowerOut = 0.0f;
 };
 
 AudioContext& GetAudioContext();

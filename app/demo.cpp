@@ -162,7 +162,7 @@ void demo_init()
 
     demo_draw_midi_init();
 
-    audio_init([=](const std::chrono::microseconds hostTime, void* pOutput, std::size_t numSamples) {
+    audio_init([=](const std::chrono::microseconds hostTime, const void* pInput, void* pOutput, uint32_t numSamples) {
         // Do extra audio synth work here
         demo_synth_note((float*)pOutput, uint32_t(numSamples));
     });
@@ -222,7 +222,6 @@ void demo_draw()
     PROFILE_SCOPE(demo_draw)
 
     auto& ctx = GetAudioContext();
-    auto hostTime = duration_cast<milliseconds>(ctx.m_link.clock().micros());
 
     demo_draw_menu();
 
@@ -262,8 +261,10 @@ void demo_draw()
     {
         if (ImGui::Begin("Audio", &showAudio))
         {
+            #if USE_LINK
             ImGui::SeparatorText("Link");
             audio_show_link_gui();
+            #endif
 
             ImGui::SeparatorText("Test");
             ImGui::BeginDisabled(ctx.outputState.channelCount == 0 ? true : false);
@@ -273,11 +274,13 @@ void demo_draw()
                 playNote = true;
             }
 
+            #if USE_LINK
             bool metro = ctx.settings.enableMetronome;
             if (ImGui::Checkbox("Metronome", &metro))
             {
                 ctx.settings.enableMetronome = metro;
             }
+            #endif
 
             bool midi = ctx.settings.enableMidi;
             if (ImGui::Checkbox("Midi Synth Out", &midi))

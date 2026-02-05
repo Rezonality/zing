@@ -26,7 +26,7 @@ project(Zing
 )
 
 include(cmake/utils.cmake)
-find_package(unofficial-concurrentqueue CONFIG REQUIRED)
+find_package(concurrentqueue CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 find_package(portaudio CONFIG REQUIRED)
 

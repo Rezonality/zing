@@ -1,5 +1,7 @@
 #include <zing/pch.h>
 
+#include <format>
+
 #include <zest/settings/settings.h>
 
 #include <zing/audio/audio.h>
@@ -8,12 +10,19 @@
 #include <zing/audio/audio_device_settings.h>
 #include <zing/audio/audio_samples.h>
 #include <zing/audio/midi.h>
+#include <zing/audio/waterfall.h>
 
 //#define LIBREMIDI_HEADER_ONLY
 #include <libremidi/libremidi.hpp>
 
+#include <cmath>
+#include <tinyfiledialogs/tinyfiledialogs.h>
+
 using namespace std::chrono;
+
+#ifdef USE_LINK
 using namespace ableton;
+#endif
 using namespace Zest;
 
 namespace Zing
@@ -47,6 +56,107 @@ std::vector<double> sampleRates = {
 uint32_t defaultFrameIndex = 1;
 AudioContext audioContext;
 
+struct OutputCompressorState
+{
+    std::vector<sp_compressor*> comps;
+    uint32_t sampleRate = 0;
+    uint32_t channels = 0;
+};
+
+OutputCompressorState g_outputComp;
+
+void destroy_output_compressor()
+{
+    for (auto*& comp : g_outputComp.comps)
+    {
+        if (comp)
+        {
+            sp_compressor_destroy(&comp);
+            comp = nullptr;
+        }
+    }
+    g_outputComp.comps.clear();
+    g_outputComp.sampleRate = 0;
+    g_outputComp.channels = 0;
+}
+
+void ensure_output_compressor(uint32_t channels, uint32_t sampleRate)
+{
+    auto& ctx = audioContext;
+    if (!ctx.pSP || channels == 0)
+        return;
+
+    if (g_outputComp.sampleRate == sampleRate && g_outputComp.channels == channels && !g_outputComp.comps.empty())
+        return;
+
+    destroy_output_compressor();
+    g_outputComp.sampleRate = sampleRate;
+    g_outputComp.channels = channels;
+    g_outputComp.comps.resize(channels, nullptr);
+    for (uint32_t c = 0; c < channels; ++c)
+    {
+        sp_compressor_create(&g_outputComp.comps[c]);
+        sp_compressor_init(ctx.pSP, g_outputComp.comps[c]);
+    }
+}
+
+void apply_output_compressor(float* outputBuffer, uint32_t frames, uint32_t channels)
+{
+    auto& ctx = audioContext;
+    if (!ctx.audioAnalysisSettings.compEnabled || !outputBuffer || channels == 0)
+        return;
+
+    PROFILE_SCOPE(apply_output_compressor);
+
+    double inSum = 0.0;
+    double outSum = 0.0;
+    const uint32_t sampleCount = frames * channels;
+    for (uint32_t i = 0; i < sampleCount; ++i)
+    {
+        const double v = outputBuffer[i];
+        inSum += v * v;
+    }
+
+    ensure_output_compressor(channels, ctx.outputState.sampleRate);
+    if (g_outputComp.comps.empty())
+        return;
+
+    const float thresholdDb = std::clamp(ctx.audioAnalysisSettings.compThresholdDb, -80.0f, 0.0f);
+    const float ratio = std::max(ctx.audioAnalysisSettings.compRatio, 1.0f);
+    const float attack = std::max(ctx.audioAnalysisSettings.compAttack, 1e-4f);
+    const float release = std::max(ctx.audioAnalysisSettings.compRelease, 1e-4f);
+
+    for (uint32_t c = 0; c < channels; ++c)
+    {
+        auto* comp = g_outputComp.comps[c];
+        if (!comp)
+            continue;
+
+        *comp->ratio = ratio;
+        *comp->thresh = thresholdDb;
+        *comp->atk = attack;
+        *comp->rel = release;
+
+        for (uint32_t f = 0; f < frames; ++f)
+        {
+            const uint32_t idx = (f * channels) + c;
+            SPFLOAT in = outputBuffer[idx];
+            SPFLOAT out = in;
+            sp_compressor_compute(ctx.pSP, comp, &in, &out);
+            outputBuffer[idx] = float(out);
+        }
+    }
+
+    for (uint32_t i = 0; i < sampleCount; ++i)
+    {
+        const double v = outputBuffer[i];
+        outSum += v * v;
+    }
+    const double denom = std::max<uint32_t>(1u, sampleCount);
+    ctx.radioCompPower.store(float(inSum / denom), std::memory_order_relaxed);
+    ctx.radioCompPowerOut.store(float(outSum / denom), std::memory_order_relaxed);
+}
+
 } // namespace
 
 AudioContext& GetAudioContext()
@@ -71,6 +181,17 @@ void audio_retire_bundle(std::shared_ptr<AudioBundle>& pBundle)
     audioContext.spareBundles.enqueue(pBundle);
 }
 
+void audio_start_playing()
+{
+#ifdef USE_LINK
+    auto& ctx = audioContext;
+    LOCK_GUARD(ctx.m_linkDataGuard, LinkDataGuard);
+    ctx.m_linkData.requestStart = true;
+    ctx.m_link.enable(true);
+#endif
+}
+
+#ifdef USE_LINK
 LinkData audio_pull_link_data()
 {
     auto& ctx = audioContext;
@@ -160,17 +281,11 @@ void audio_play_metronome(const Link::SessionState sessionState, const double qu
         }
     }
 }
-
-void audio_start_playing()
-{
-    auto& ctx = audioContext;
-    LOCK_GUARD(ctx.m_linkDataGuard, LinkDataGuard);
-    ctx.m_linkData.requestStart = true;
-    ctx.m_link.enable(true);
-}
+#endif
 
 void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput, uint32_t frameCount)
 {
+    #ifdef USE_LINK
     auto& ctx = audioContext;
     const auto engineData = audio_pull_link_data();
 
@@ -212,6 +327,7 @@ void audio_pre_callback(const std::chrono::microseconds hostTime, void* pOutput,
         // the buffer at the appropriate beats.
         audio_play_metronome(sessionState, engineData.quantum, hostTime, pOutput, frameCount);
     }
+    #endif
 }
 
 void audio_process_midi(void* pOutput, uint32_t frameCount)
@@ -220,8 +336,10 @@ void audio_process_midi(void* pOutput, uint32_t frameCount)
 
     auto time_ms = timer_to_ms(timer_get_elapsed(ctx.m_masterClock));
 
+    #if USE_LINK
     // Make time seem sooner by the latency, so we hear the sound when it is due
     time_ms += (ctx.m_outputLatency.load().count() / 1000.0);
+    #endif
 
     // Process midi
     static libremidi::message msg;
@@ -324,7 +442,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
     auto bLocked = spin_mutex_try(ctx.audioTickEnableMutex, [&]() {
         if (ctx.m_totalFrames == 0)
         {
-            ctx.m_frameInitTime = ctx.m_link.clock().micros();
+            ctx.m_frameInitTime = duration_cast<microseconds>(steady_clock::now().time_since_epoch());
             ctx.m_frameCurrentTime = ctx.m_frameInitTime;
         }
 
@@ -336,16 +454,24 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
         const double sampleRate = static_cast<double>(ctx.outputState.sampleRate);
         const auto bufferDuration = duration_cast<microseconds>(duration<double>{nBufferFrames / sampleRate});
 
-        // Link
+        #ifdef USE_LINK
         auto hostTimeAtFrame = ctx.m_hostTimeFilter.sampleTimeToHostTime(double(ctx.m_totalFrames));
         ctx.m_totalFrames += nBufferFrames;
         const auto bufferBeginAtOutput = hostTimeAtFrame + ctx.m_outputLatency.load();
-        // Link
+        #else
+        const auto bufferBeginAtOutput = duration_cast<microseconds>(steady_clock::now().time_since_epoch());
+        auto hostTimeAtFrame = bufferBeginAtOutput;
+        #endif
 
         auto samples = (float*)outputBuffer;
 
-        // Ensure TP has same tempo
-        // TimeProvider::Instance().SetTempo(sessionState.tempo(), 4.0);
+        for (uint32_t i = 0; i < nBufferFrames; i++)
+        {
+            for (uint32_t c = 0; c < ctx.outputState.channelCount; c++)
+            {
+                samples[i * ctx.outputState.channelCount + c] = 0.0f;
+            }
+        }
 
         audio_pre_callback(hostTimeAtFrame, outputBuffer, nBufferFrames);
 
@@ -359,7 +485,7 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
                 // Copy the audio data into a processing bundle and add it to the queue
                 auto pBundle = audio_get_bundle();
                 pBundle->data.resize(nBufferFrames);
-                pBundle->channel = Id.second;
+                pBundle->channel = Id;
 
                 // Copy with stride
                 auto stride = state.channelCount;
@@ -375,6 +501,17 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
             }
         };
 
+        if (inputBuffer && !ctx.inputStreamOverride.empty())
+        {
+            ctx.inputState.channelCount = 1; // hack
+            if ((ctx.inputStreamIndex + nBufferFrames) >= ctx.inputStreamOverride.size())
+            {
+                ctx.inputStreamIndex = 0;
+            }
+            inputBuffer = &ctx.inputStreamOverride[ctx.inputStreamIndex];
+            ctx.inputStreamIndex += nBufferFrames;
+        }
+
         if (ctx.m_isPlaying)
         {
             if (inputBuffer)
@@ -389,8 +526,10 @@ int audio_tick(const void* inputBuffer, void* outputBuffer, unsigned long nBuffe
             {
                 if (ctx.m_fnCallback)
                 {
-                    ctx.m_fnCallback(bufferBeginAtOutput, outputBuffer, nBufferFrames);
+                    ctx.m_fnCallback(bufferBeginAtOutput, inputBuffer, outputBuffer, nBufferFrames);
                 }
+
+                apply_output_compressor((float*)outputBuffer, nBufferFrames, ctx.outputState.channelCount);
 
                 for (uint32_t i = 0; i < ctx.outputState.channelCount; i++)
                 {
@@ -466,7 +605,7 @@ void audio_dump_devices()
         LOG(INFO, api);
     }
 
-    // Link
+    // APIs
     for (auto& [api, info] : ctx.m_mapApis)
     {
         LOG(INFO, "\nAPI: " << ctx.m_apiNames[api]);
@@ -657,6 +796,7 @@ void audio_set_channels_rate(int outputChannels, int inputChannels, uint32_t out
         sp_destroy(&ctx.pSP);
         ctx.pSP = nullptr;
     }
+    destroy_output_compressor();
 
     sp_create(&ctx.pSP);
     ctx.pSP->nchan = ctx.outputState.channelCount;
@@ -689,7 +829,8 @@ void audio_destroy()
         sp_destroy(&ctx.pSP);
         ctx.pSP = nullptr;
     }
-    
+    destroy_output_compressor();
+
     ctx.audioTickEnableMutex.unlock();
 }
 
@@ -717,9 +858,22 @@ void audio_add_settings_hooks()
     client.pfnSave = [](toml::table& tbl) {
         auto& ctx = audioContext;
 
-        auto audio = toml_sub_table(tbl, "audio");
-        audio->insert("analysis", audioanalysis_save_settings(ctx.audioAnalysisSettings));
-        audio->insert("device", audiodevice_save_settings(ctx.audioDeviceSettings));
+        auto get_table = [](toml::table& parent, const char* key) -> toml::table& {
+            auto node = parent.get(key);
+            if (node && node->is_table())
+                return *node->as_table();
+            auto itr = parent.insert_or_assign(key, toml::table{});
+            return *itr.first->second.as_table();
+        };
+
+        auto& audio = get_table(tbl, "audio");
+        auto& analysisTable = get_table(audio, "analysis");
+        auto analysisSettings = audioanalysis_save_settings(ctx.audioAnalysisSettings);
+        for (auto&& [key, value] : analysisSettings)
+        {
+            analysisTable.insert_or_assign(key, value);
+        }
+        audio.insert_or_assign("device", audiodevice_save_settings(ctx.audioDeviceSettings));
     };
 
     auto& settings = Zest::GlobalSettingsManager::Instance();
@@ -733,22 +887,6 @@ bool audio_init(const AudioCB& fnCallback)
     timer_restart(ctx.m_masterClock);
 
     ctx.m_fnCallback = fnCallback;
-
-    ctx.m_link.setTempoCallback([](auto tempo) {
-        auto& ctx = audioContext;
-        ctx.m_tempo = tempo;
-    });
-
-    ctx.m_link.setNumPeersCallback([](auto numPeers) {
-        auto& ctx = audioContext;
-        ctx.m_numPeers = int(numPeers);
-    });
-
-    ctx.m_link.setStartStopCallback([](auto isPlaying) {
-        //auto& ctx = audioContext;
-        //ctx.m_isPlaying = isPlaying;
-    });
-
     audio_analysis_destroy_all();
     samples_stop(ctx.m_samples);
 
@@ -820,7 +958,7 @@ bool audio_init(const AudioCB& fnCallback)
     PaStreamFlags flags = paNoFlag;
 
     // Link
-    ctx.m_outputLatency.store(std::chrono::microseconds(llround(ctx.m_outputParams.suggestedLatency * 1.0e6)));
+    //ctx.m_outputLatency.store(std::chrono::microseconds(llround(ctx.m_outputParams.suggestedLatency * 1.0e6)));
 
     auto ret = Pa_OpenStream(&ctx.m_pStream, ctx.audioDeviceSettings.enableInput ? &ctx.m_inputParams : nullptr, ctx.audioDeviceSettings.enableOutput ? &ctx.m_outputParams : nullptr, ctx.audioDeviceSettings.sampleRate, ctx.audioDeviceSettings.frames, flags, audio_tick, nullptr);
     if (ret != paNoError)
@@ -933,6 +1071,7 @@ bool Combo(const char* label, int* current_item, const std::vector<std::string>&
         int(items.size()));
 }
 
+#ifdef USE_LINK
 void audio_show_link_gui()
 {
     using namespace std;
@@ -976,13 +1115,13 @@ void audio_show_link_gui()
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Peers");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text(fmt::format("{}", ctx.m_numPeers).c_str());
+        ImGui::Text(std::format("{}", ctx.m_numPeers).c_str());
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Quantum");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text(fmt::format("{}", ctx.m_lockFreeLinkData.quantum).c_str());
+        ImGui::Text(std::format("{}", ctx.m_lockFreeLinkData.quantum).c_str());
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
@@ -1000,13 +1139,13 @@ void audio_show_link_gui()
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Tempo");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text(fmt::format("{}", int(ctx.m_tempo)).c_str());
+        ImGui::Text(std::format("{}", int(ctx.m_tempo)).c_str());
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Beats");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text(fmt::format("{:.2f}", beats).c_str());
+        ImGui::Text(std::format("{:.2f}", beats).c_str());
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
@@ -1018,41 +1157,15 @@ void audio_show_link_gui()
         ImGui::EndTable();
     }
 }
+#endif
 
 void audio_show_settings_gui()
 {
     auto& ctx = audioContext;
 
     bool audioResetRequired = false;
-    if (Combo("API", &ctx.audioDeviceSettings.apiIndex, ctx.m_apiNames))
-    {
-        ctx.m_changedDeviceCombo = true;
-    }
 
-    if (ImGui::Checkbox("Enable Input", &audioContext.audioDeviceSettings.enableInput))
-    {
-        ctx.m_changedDeviceCombo = true;
-    }
-
-    if (ImGui::Checkbox("Enable Output", &audioContext.audioDeviceSettings.enableOutput))
-    {
-        ctx.m_changedDeviceCombo = true;
-    }
-
-    auto& api = ctx.m_mapApis[audioContext.audioDeviceSettings.apiIndex];
-    if (Combo("Output", &audioContext.audioDeviceSettings.outputDevice, api.outDeviceNames))
-    {
-        ctx.m_changedDeviceCombo = true;
-    }
-    if (Combo("Input", &audioContext.audioDeviceSettings.inputDevice, api.inDeviceNames))
-    {
-        ctx.m_changedDeviceCombo = true;
-    }
-
-    if (ctx.m_changedDeviceCombo)
-    {
-        audioResetRequired = true;
-    }
+    AudioAnalysisSettings& analysisSettings = ctx.audioAnalysisSettings;
 
     auto getFrameIndex = [&](uint32_t frameSize) {
         int frameIndex = 0;
@@ -1071,111 +1184,193 @@ void audio_show_settings_gui()
         }
         return frameIndex;
     };
+    auto frameIndex = getFrameIndex(analysisSettings.frames);
 
-    auto frameIndex = getFrameIndex(audioContext.audioDeviceSettings.frames);
-    if (Combo("Frame Size", &frameIndex, frameNames))
+    if (ImGui::CollapsingHeader("Device Settings", ImGuiTreeNodeFlags_None))
     {
-        audioContext.audioDeviceSettings.frames = frameSizes[frameIndex];
-        audioResetRequired = true;
-    }
-
-    audio_validate_rates();
-
-    int rateIndex = 0;
-    for (auto& iRate : ctx.m_currentRates)
-    {
-        if (iRate == audioContext.audioDeviceSettings.sampleRate)
+        if (Combo("API", &ctx.audioDeviceSettings.apiIndex, ctx.m_apiNames))
         {
-            break;
+            ctx.m_changedDeviceCombo = true;
         }
-        rateIndex++;
-    }
 
-    if (rateIndex >= ctx.m_currentRates.size())
-    {
-        rateIndex = 0;
-    }
-    if (Combo("Sample Rate", &rateIndex, ctx.m_currentRateNames))
-    {
-        audioContext.audioDeviceSettings.sampleRate = uint32_t(ctx.m_currentRates[rateIndex]);
-        audioResetRequired = true;
-    }
-
-    AudioAnalysisSettings& analysisSettings = ctx.audioAnalysisSettings;
-
-    if (ctx.audioDeviceSettings.enableInput)
-    {
-        int index = 0;
-        auto frameIndex = getFrameIndex(analysisSettings.frames);
-        if (Combo("Analysis Frames", &frameIndex, frameNames))
+        if (ImGui::Checkbox("Enable Input", &audioContext.audioDeviceSettings.enableInput))
         {
-            analysisSettings.frames = frameSizes[frameIndex];
+            ctx.m_changedDeviceCombo = true;
+        }
+
+        if (ImGui::Checkbox("Enable Output", &audioContext.audioDeviceSettings.enableOutput))
+        {
+            ctx.m_changedDeviceCombo = true;
+        }
+
+        auto& api = ctx.m_mapApis[audioContext.audioDeviceSettings.apiIndex];
+        if (Combo("Output##Device", &audioContext.audioDeviceSettings.outputDevice, api.outDeviceNames))
+        {
+            ctx.m_changedDeviceCombo = true;
+        }
+        if (Combo("Input", &audioContext.audioDeviceSettings.inputDevice, api.inDeviceNames))
+        {
+            ctx.m_changedDeviceCombo = true;
+        }
+
+        if (ctx.m_changedDeviceCombo)
+        {
             audioResetRequired = true;
         }
 
-        auto spectrumBucketsIndex = getFrameIndex(analysisSettings.spectrumBuckets);
-        if (Combo("Spectrum Buckets", &spectrumBucketsIndex, frameNames))
+        auto frameIndex = getFrameIndex(audioContext.audioDeviceSettings.frames);
+        if (Combo("Frame Size", &frameIndex, frameNames))
         {
-            analysisSettings.spectrumBuckets = frameSizes[spectrumBucketsIndex];
+            audioContext.audioDeviceSettings.frames = frameSizes[frameIndex];
             audioResetRequired = true;
         }
 
-        // Note; negative DB
-        float dB = -analysisSettings.audioDecibelRange;
-        if (ImGui::SliderFloat("Decibel (DbFS)", &dB, -120.0f, -1.0f))
+        audio_validate_rates();
+
+        int rateIndex = 0;
+        for (auto& iRate : ctx.m_currentRates)
         {
-            // No need to reset the device
-            analysisSettings.audioDecibelRange = -dB;
+            if (iRate == audioContext.audioDeviceSettings.sampleRate)
+            {
+                break;
+            }
+            rateIndex++;
         }
 
-        float blend = analysisSettings.blendFactor;
-        if (ImGui::SliderFloat("Blend Time (ms)", &blend, 1.0f, 1000.0f))
+        if (rateIndex >= ctx.m_currentRates.size())
         {
-            // No need to reset the device
-            analysisSettings.blendFactor = blend;
+            rateIndex = 0;
+        }
+        if (Combo("Sample Rate", &rateIndex, ctx.m_currentRateNames))
+        {
+            audioContext.audioDeviceSettings.sampleRate = uint32_t(ctx.m_currentRates[rateIndex]);
+            audioResetRequired = true;
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Output##Analysis", ImGuiTreeNodeFlags_None))
+    {
+        if (ctx.audioDeviceSettings.enableInput)
+        {
+            bool midi = ctx.settings.enableMidi;
+            if (ImGui::Checkbox("Midi Synth Out", &midi))
+            {
+                ctx.settings.enableMidi = midi;
+            }
+
+            int index = 0;
+            if (Combo("Analysis Frames", &frameIndex, frameNames))
+            {
+                analysisSettings.frames = frameSizes[frameIndex];
+                audioResetRequired = true;
+            }
+
+            auto spectrumBucketsIndex = getFrameIndex(analysisSettings.spectrumBuckets);
+            if (Combo("Spectrum Buckets", &spectrumBucketsIndex, frameNames))
+            {
+                analysisSettings.spectrumBuckets = frameSizes[spectrumBucketsIndex];
+                audioResetRequired = true;
+            }
+
+            // Note; negative DB
+            float dB = -analysisSettings.audioDecibelRange;
+            if (ImGui::SliderFloat("Decibel (DbFS)", &dB, -120.0f, -1.0f))
+            {
+                // No need to reset the device
+                analysisSettings.audioDecibelRange = -dB;
+            }
+
+            float blend = analysisSettings.blendFactor;
+            if (ImGui::SliderFloat("Blend Time (ms)", &blend, 1.0f, 1000.0f))
+            {
+                // No need to reset the device
+                analysisSettings.blendFactor = blend;
+            }
+
+            bool blendFFT = analysisSettings.blendFFT;
+            if (ImGui::Checkbox("Blend FFT", &blendFFT))
+            {
+                // No need to reset the device
+                analysisSettings.blendFFT = blendFFT;
+            }
+
+            bool filterFFT = analysisSettings.filterFFT;
+            if (ImGui::Checkbox("Smooth FFT", &filterFFT))
+            {
+                analysisSettings.filterFFT = filterFFT;
+            }
+
+            /*
+            bool removeJitter = analysisSettings.removeFFTJitter;
+            if (ImGui::Checkbox("Remove Jitter FFT", &removeJitter))
+            {
+                analysisSettings.removeFFTJitter = removeJitter;
+            }
+            */
+
+            auto freq = glm::i32vec4(analysisSettings.spectrumFrequencies);
+            if (ImGui::DragIntRange4("Spectrum Bands", freq, 1.0f, 0, 48000))
+            {
+                analysisSettings.spectrumFrequencies = glm::uvec4(freq);
+            }
+
+            auto gains = analysisSettings.spectrumGains;
+            if (ImGui::SliderFloat4("Band Gains", &gains.x, 0.0f, 1.0f))
+            {
+                analysisSettings.spectrumGains = gains;
+            }
         }
 
-        bool logPartitions = analysisSettings.logPartitions;
-        if (ImGui::Checkbox("Log Frequency Partitions", &logPartitions))
+        if (ImGui::CollapsingHeader("Compressor", ImGuiTreeNodeFlags_None))
         {
-            // No need to reset the device
-            analysisSettings.logPartitions = logPartitions;
+            bool compEnabled = analysisSettings.compEnabled;
+            if (ImGui::Checkbox("Enabled##comp_enabled", &compEnabled))
+            {
+                analysisSettings.compEnabled = compEnabled;
+            }
+
+            float compThreshold = analysisSettings.compThresholdDb;
+            if (ImGui::SliderFloat("Threshold (dB)##comp_threshold", &compThreshold, -80.0f, 0.0f, "%.1f"))
+            {
+                analysisSettings.compThresholdDb = compThreshold;
+            }
+
+            float compRatio = analysisSettings.compRatio;
+            if (ImGui::SliderFloat("Ratio##comp_ratio", &compRatio, 1.0f, 20.0f, "%.2f"))
+            {
+                analysisSettings.compRatio = compRatio;
+            }
+
+            float compAttack = analysisSettings.compAttack;
+            if (ImGui::SliderFloat("Attack##comp_attack", &compAttack, 0.01f, 1.0f, "%.3f"))
+            {
+                analysisSettings.compAttack = compAttack;
+            }
+
+            float compRelease = analysisSettings.compRelease;
+            if (ImGui::SliderFloat("Release##comp_release", &compRelease, 0.001f, 1.0f, "%.3f"))
+            {
+                analysisSettings.compRelease = compRelease;
+            }
+
+            auto comp_bar = [](float power) {
+                const float db = 10.0f * std::log10(std::max(power, 1e-12f));
+                return std::clamp((db + 80.0f) / 80.0f, 0.0f, 1.0f);
+            };
+            const float compPower = ctx.radioCompPower.load(std::memory_order_relaxed);
+            const float compPowerOut = ctx.radioCompPowerOut.load(std::memory_order_relaxed);
+            ImGui::Separator();
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(255, 215, 0, 255));
+            ImGui::ProgressBar(comp_bar(compPower), ImVec2(-1.0f, 6.0f), "");
+            ImGui::PopStyleColor();
+            ImGui::PushStyleColor(ImGuiCol_PlotHistogram, IM_COL32(0, 200, 0, 255));
+            ImGui::ProgressBar(comp_bar(compPowerOut), ImVec2(-1.0f, 6.0f), "");
+            ImGui::PopStyleColor();
         }
 
-        ImGui::SliderFloat("Spectrum Log Curve", &analysisSettings.spectrumSharpness, 2.0f, 100.0f);
-
-        bool blendFFT = analysisSettings.blendFFT;
-        if (ImGui::Checkbox("Blend FFT", &blendFFT))
+        if (ImGui::CollapsingHeader("Waterfall", ImGuiTreeNodeFlags_None))
         {
-            // No need to reset the device
-            analysisSettings.blendFFT = blendFFT;
-        }
-
-        bool filterFFT = analysisSettings.filterFFT;
-        if (ImGui::Checkbox("Smooth FFT", &filterFFT))
-        {
-            // No need to reset the device
-            analysisSettings.filterFFT = filterFFT;
-        }
-
-        /*
-        bool removeJitter = analysisSettings.removeFFTJitter;
-        if (ImGui::Checkbox("Remove Jitter FFT", &removeJitter))
-        {
-            analysisSettings.removeFFTJitter = removeJitter;
-        }
-        */
-
-        auto freq = glm::i32vec4(analysisSettings.spectrumFrequencies);
-        if (ImGui::DragIntRange4("Spectrum Bands", freq, 1.0f, 0, 48000))
-        {
-            analysisSettings.spectrumFrequencies = glm::uvec4(freq);
-        }
-
-        auto gains = analysisSettings.spectrumGains;
-        if (ImGui::SliderFloat4("Band Gains", &gains.x, 0.0f, 1.0f))
-        {
-            analysisSettings.spectrumGains = gains;
+            Waterfall_DrawControls(Waterfall_Get());
         }
     }
 
@@ -1184,6 +1379,10 @@ void audio_show_settings_gui()
         ctx.audioDeviceSettings = AudioDeviceSettings{};
         ctx.audioAnalysisSettings = AudioAnalysisSettings{};
         audioResetRequired = true;
+    }
+
+    if (ctx.audioDeviceSettings.enableInput)
+    {
     }
 
     // Ensure sensible
@@ -1202,7 +1401,7 @@ void audio_show_settings_gui()
 
 std::string audio_to_channel_name(ChannelId id)
 {
-    return fmt::format("{}:{}", id.first == Channel_In ? "I" : (id.first == Channel_Out ? "O" : std::to_string(id.first)), id.second == 0 ? "L" : (id.second == 1 ? "R" : std::to_string(id.second)));
+    return std::format("{}:{}", id.first == Channel_In ? "I" : (id.first == Channel_Out ? "O" : std::to_string(id.first)), id.second == 0 ? "L" : (id.second == 1 ? "R" : std::to_string(id.second)));
 }
 
 ChannelId audio_to_channel_id(uint32_t channel_type, uint32_t channel)
