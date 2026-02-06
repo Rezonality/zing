@@ -35,6 +35,13 @@ jobs:
       with:
         cmake-version: "4.0.0"
 
+    - name: SDL
+      uses: libsdl-org/setup-sdl@main
+      with:
+        install-linux-dependencies: true
+        version: 3-latest
+        version-sdl-image: 3-latest
+
     - name: Install Vulkan SDK
       uses: humbletim/setup-vulkan-sdk@v1.2.1
       with:
@@ -47,11 +54,11 @@ jobs:
         brew install pkg-config
       if: matrix.os == 'macos-latest'
 
-    - name: Install Coverage
+    - name: Install Packages
       env:
         CC: ${{ matrix.cc}}
       run: |
-        sudo apt-get install lcov
+        sudo apt-get install lcov autoconf autoconf-archive automake libtool python3 libltdl-dev
       if: matrix.os == 'ubuntu-latest'
 
     - name: Build Zing

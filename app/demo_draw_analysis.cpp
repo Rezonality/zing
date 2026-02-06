@@ -46,7 +46,7 @@ void demo_draw_analysis()
 
             if (!spectrumBuckets.empty())
             {
-                ImVec2 plotSize(300, 100);
+                ImVec2 plotSize(600, 100);
                 if (i == 0)
                 {
                     ImGui::PlotLines(std::format("Spectrum: {}", audio_to_channel_name(Id)).c_str(), &spectrumBuckets[0], static_cast<int>(spectrumBuckets.size() / 2.5), 0, NULL, 0.0f, 1.0f, plotSize);
