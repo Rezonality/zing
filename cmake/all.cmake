@@ -92,7 +92,6 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
     LIST(APPEND PLATFORM_LINKLIBS
         dl
         Threads::Threads
-        z
         )
 
     message(STATUS "TARGET_LINUX")

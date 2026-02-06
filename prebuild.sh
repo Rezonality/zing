@@ -13,7 +13,7 @@ if [ "$(uname)" == "Darwin" ]; then
 fi
 
 cd vcpkg
-./vcpkg install ableton-link cppcodec tinydir concurrentqueue stb portaudio fmt clipp glm sdl2[vulkan] catch2 --triplet ${triplet[0]} --recurse
+./vcpkg install ableton-link cppcodec tinydir tinyfiledialogs concurrentqueue stb portaudio fmt clipp glm sdl3[vulkan] catch2 --triplet ${triplet[0]} --recurse
 if [ "$(uname)" != "Darwin" ]; then
 ./vcpkg install glib --triplet ${triplet[0]} --recurse
 fi
