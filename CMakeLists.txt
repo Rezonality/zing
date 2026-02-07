@@ -18,6 +18,10 @@ if (WIN32)
 set(VCPKG_TARGET_TRIPLET x64-windows-static-md)
 endif()
 
+if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
+set(VCPKG_TARGET_TRIPLET x64-osx)
+endif()
+
 set(CMAKE_TOOLCHAIN_FILE ${CMAKE_CURRENT_SOURCE_DIR}/vcpkg/scripts/buildsystems/vcpkg.cmake CACHE STRING "Vcpkg toolchain file")
 
 project(Zing
