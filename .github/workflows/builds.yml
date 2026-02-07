@@ -67,7 +67,7 @@ jobs:
         ./prebuild.${{matrix.script}}
         mkdir build
         cd build
-        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        cmake .. -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DVCPKG_TARGET_TRIPLET=${{ matrix.package_type }}
         cmake --build . --config ${{ matrix.build_type }}
       if: matrix.build_type != 'Coverage'
 
@@ -77,7 +77,7 @@ jobs:
         ./prebuild.${{matrix.script}}
         mkdir build
         cd build
-        cmake .. -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug
+        cmake .. -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug -DVCPKG_TARGET_TRIPLET=${{ matrix.package_type }}
         cmake --build . --config Debug
       if: matrix.build_type == 'Coverage'
 
