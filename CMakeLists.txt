@@ -31,7 +31,6 @@ project(Zing
 
 include(cmake/utils.cmake)
 find_package(concurrentqueue CONFIG REQUIRED)
-find_package(fmt CONFIG REQUIRED)
 find_package(portaudio CONFIG REQUIRED)
 
 set(ZING_ROOT ${CMAKE_CURRENT_LIST_DIR})
