@@ -126,6 +126,7 @@ target_link_libraries(Zing
 PUBLIC
     Zest::Zest
 PRIVATE
+    fmt::fmt-header-only
     portaudio_static
     tinyfiledialogs::tinyfiledialogs
 )

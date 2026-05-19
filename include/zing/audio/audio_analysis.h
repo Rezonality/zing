@@ -2,7 +2,7 @@
 
 #include <atomic>
 #include <zing/audio/audio.h>
-#include <concurrentqueue/moodycamel/concurrentqueue.h>
+#include <concurrentqueue/concurrentqueue.h>
 
 namespace Zing
 {

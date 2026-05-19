@@ -8,13 +8,13 @@
 #include <functional>
 #include <chrono>
 #include <cmath>
-#include <format>
 
 #include <filesystem>
 
+#include <fmt/format.h>
 #include <tsf/tsf.h>
 #include <libremidi/message.hpp>
-#include <concurrentqueue/moodycamel/concurrentqueue.h>
+#include <concurrentqueue/concurrentqueue.h>
 
 #include <zest/common.h>
 #include <zest/logger/logger.h>

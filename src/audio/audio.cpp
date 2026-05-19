@@ -1,7 +1,5 @@
 #include <zing/pch.h>
 
-#include <format>
-
 #include <zest/settings/settings.h>
 
 #include <zing/audio/audio.h>
@@ -1115,13 +1113,13 @@ void audio_show_link_gui()
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Peers");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text(std::format("{}", ctx.m_numPeers).c_str());
+        ImGui::Text(fmt::format("{}", ctx.m_numPeers).c_str());
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Quantum");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text(std::format("{}", ctx.m_lockFreeLinkData.quantum).c_str());
+        ImGui::Text(fmt::format("{}", ctx.m_lockFreeLinkData.quantum).c_str());
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
@@ -1139,13 +1137,13 @@ void audio_show_link_gui()
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Tempo");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text(std::format("{}", int(ctx.m_tempo)).c_str());
+        ImGui::Text(fmt::format("{}", int(ctx.m_tempo)).c_str());
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
         ImGui::Text("Beats");
         ImGui::TableSetColumnIndex(1);
-        ImGui::Text(std::format("{:.2f}", beats).c_str());
+        ImGui::Text(fmt::format("{:.2f}", beats).c_str());
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
@@ -1401,7 +1399,7 @@ void audio_show_settings_gui()
 
 std::string audio_to_channel_name(ChannelId id)
 {
-    return std::format("{}:{}", id.first == Channel_In ? "I" : (id.first == Channel_Out ? "O" : std::to_string(id.first)), id.second == 0 ? "L" : (id.second == 1 ? "R" : std::to_string(id.second)));
+    return fmt::format("{}:{}", id.first == Channel_In ? "I" : (id.first == Channel_Out ? "O" : std::to_string(id.first)), id.second == 0 ? "L" : (id.second == 1 ? "R" : std::to_string(id.second)));
 }
 
 ChannelId audio_to_channel_id(uint32_t channel_type, uint32_t channel)

@@ -118,7 +118,7 @@ bool audio_analysis_start(AudioAnalysis& analysis, const AudioChannelState& stat
             if (!pAnalysis->processBundles.try_dequeue(spData))
             {
 #ifdef DEBUG
-                Zest::Profiler::NameThread(std::format("Analysis: {}", audio_to_channel_name(pAnalysis->thisChannel)).c_str());
+                Zest::Profiler::NameThread(fmt::format("Analysis: {}", audio_to_channel_name(pAnalysis->thisChannel)).c_str());
 #endif
                 // Sleep
                 std::this_thread::sleep_for(wakeUpDelta);
