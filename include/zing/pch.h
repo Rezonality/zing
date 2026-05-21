@@ -14,7 +14,7 @@
 #include <fmt/format.h>
 #include <tsf/tsf.h>
 #include <libremidi/message.hpp>
-#include <concurrentqueue/concurrentqueue.h>
+#include <moodycamel/concurrentqueue.h>
 
 #include <zest/common.h>
 #include <zest/logger/logger.h>
