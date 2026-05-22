@@ -6,16 +6,16 @@ void sp_fft_init(sp_fft *fft, int M)
     int i;
 
     /* init cos table */
-    utbl = (SPFLOAT*) malloc((POW2(M) / 4 + 1) * sizeof(SPFLOAT));
+    utbl = (SPFLOAT*) calloc(POW2(M) / 4 + 1, sizeof(SPFLOAT));
     fftCosInit(M, utbl);
 
     BRLowCpx =
-      (int16_t*) malloc(POW2(M / 2 - 1) * sizeof(int16_t));
+      (int16_t*) calloc(POW2(M / 2 - 1), sizeof(int16_t));
     fftBRInit(M, BRLowCpx);
 
     /* init bit reversed table for real FFT */
      BRLow =
-      (int16_t*) malloc(POW2((M - 1) / 2 - 1) * sizeof(int16_t));
+      (int16_t*) calloc(POW2((M - 1) / 2 - 1), sizeof(int16_t));
     fftBRInit(M - 1, BRLow);
 
     fft->BRLow = BRLow;
