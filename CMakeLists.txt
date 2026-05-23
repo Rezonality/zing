@@ -55,6 +55,7 @@ enable_testing()
 
 include(cmake/all.cmake)
 add_subdirectory(libs/zest)
+add_subdirectory(libs/remidi)
 
 add_subdirectory(src)
 

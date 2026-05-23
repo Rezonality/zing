@@ -12,30 +12,6 @@ set(ZING_SF2_SOURCE
     #${ZING_ROOT}/src/sf2/file.cpp
 )
 
-set(ZING_REMIDI_SOURCE
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/alsa.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/coreaudio.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/dummy.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/emscripten.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/emscripten_api.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/jack.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/midi_api.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/raw_alsa.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/raw_alsa_helpers.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/semaphore.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/winmm.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/detail/winuwp.hpp
-
-   ${ZING_ROOT}/libs/remidi/include/libremidi/message.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/reader.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/writer.hpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/libremidi.hpp
-
-   ${ZING_ROOT}/libs/remidi/include/libremidi/libremidi.cpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/reader.cpp
-   ${ZING_ROOT}/libs/remidi/include/libremidi/writer.cpp
-)
-
 set(ZING_AUDIO_SOURCE
     ${ZING_ROOT}/src/pch.cpp
     ${ZING_ROOT}/src/audio/audio.cpp
@@ -62,7 +38,6 @@ set(ZING_WAVETABLE_SOURCE
 set(ZING_SOURCE
     ${ZING_SF2_SOURCE}
     ${ZING_AUDIO_SOURCE}
-    ${ZING_REMIDI_SOURCE}
     ${ZING_WAVETABLE_SOURCE}
     ${ZING_ROOT}/project.natvis
 )
@@ -124,6 +99,7 @@ endif()
 
 target_link_libraries(Zing
 PUBLIC
+    libremidi::libremidi
     Zest::Zest
 PRIVATE
     fmt::fmt-header-only
@@ -145,7 +121,6 @@ target_include_directories(Zing
 PRIVATE
     ${CMAKE_BINARY_DIR}
 PUBLIC
-    $<BUILD_INTERFACE:${ZING_ROOT}/libs/remidi/include>
     $<BUILD_INTERFACE:${ZING_ROOT}/libs>
     $<BUILD_INTERFACE:${ZING_ROOT}/include>
     $<BUILD_INTERFACE:${ABLETON_LINK_INCLUDE_DIRS}>
@@ -163,7 +138,5 @@ PUBLIC
 source_group ("zing/audio" FILES ${ZING_AUDIO_SOURCE})
 source_group ("zing/wavetable" FILES ${ZING_WAVETABLE_SOURCE})
 source_group ("zing/sf2" FILES ${ZING_SF2_SOURCE})
-source_group ("zing/remidi" FILES ${ZING_REMIDI_SOURCE})
 source_group ("soundpipe" FILES ${SOUNDPIPE_SOURCE})
 source_group ("earlevel" FILES ${EARLEVEL_SOURCE})
-
